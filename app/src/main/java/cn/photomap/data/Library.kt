@@ -176,7 +176,7 @@ class Library(private val context: Context) {
         db.beginTransaction()
         try {
             val records = linkedMapOf<Pair<String, String>, MutableList<Photo>>()
-            for ((photo, point) in photos) {
+            for ((photo, point, placeName) in photos) {
                 // Only consider a small coordinate window, then compare actual distances in metres.
                 val location = db.rawQuery("""SELECT id, latitude, longitude FROM locations
                     WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?""",
@@ -192,7 +192,9 @@ class Library(private val context: Context) {
                     }
                     match
                 } ?: UUID.randomUUID().toString().also { id ->
-                    val name = "拍摄地点 %.4f, %.4f".format(java.util.Locale.ROOT, point.latitude, point.longitude)
+                    val name = placeName.trim().take(200).ifBlank {
+                        "拍摄地点 %.4f, %.4f".format(java.util.Locale.ROOT, point.latitude, point.longitude)
+                    }
                     db.insertOrThrow("locations", null, values("id" to id, "name" to name, "latitude" to point.latitude,
                         "longitude" to point.longitude, "created_at" to now, "updated_at" to now))
                 }

@@ -54,7 +54,8 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
             entries.getOrNull(pager.currentPage)?.let { entry ->
                 val p=entry.photo
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                    Text(p.title.ifBlank {entry.record.title}.ifBlank {p.filename},color=Color.White,style=MaterialTheme.typography.titleMedium)
+                    val recordTitle = entry.record.title.takeUnless { BuildConfig.ONLINE_MAPS && it == "照片导入" }.orEmpty()
+                    Text(p.title.ifBlank {recordTitle}.ifBlank {p.filename},color=Color.White,style=MaterialTheme.typography.titleMedium,maxLines=2)
                     Text(p.date.ifBlank {entry.record.date},color=Color.LightGray)
                     if(info) {
                         Text(p.note.ifBlank {entry.record.note},color=Color.White,maxLines=5)

@@ -12,7 +12,7 @@ data class PhotoPoint(val latitude: Double, val longitude: Double) {
         else MapViewport.inCoverage(latitude, longitude)
 }
 
-data class PhotoPlacement(val photo: Photo, val point: PhotoPoint)
+data class PhotoPlacement(val photo: Photo, val point: PhotoPoint, val placeName: String = "")
 
 fun Photo.exifPoint(): PhotoPoint? {
     val metadata = JSONObject(exif)

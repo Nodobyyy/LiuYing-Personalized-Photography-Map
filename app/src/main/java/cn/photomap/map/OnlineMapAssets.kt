@@ -14,7 +14,7 @@ object OnlineMapAssets {
     const val SATELLITE_DETAIL_ZOOM = 8
     private const val WORLD_SATELLITE_TRANSITION = 4
     private const val OVERVIEW = "maps/overview"
-    private val archives = listOf("china.pmtiles", "context.pmtiles", "satellite-overview.pmtiles", "world-satellite.pmtiles")
+    private val archives = listOf("china.pmtiles", "context.pmtiles", "satellite-overview.pmtiles", "world-satellite.pmtiles", "world-roads.pmtiles")
 
     data class Loaded(val streets: LocalMapBundle.Loaded, val satellite: JSONObject, val hasOverview: Boolean)
 
@@ -113,20 +113,18 @@ object OnlineMapAssets {
         val sources = online.getJSONObject("sources")
         sources.getJSONObject("base").put("minzoom", STREET_DETAIL_ZOOM.toInt())
         sources.put("overview", overview.getJSONObject("sources").getJSONObject("base"))
-        sources.put("context", context.getJSONObject("sources").getJSONObject("context"))
+        val contextSources = context.getJSONObject("sources")
+        contextSources.keys().forEach { sources.put(it, contextSources.getJSONObject(it)) }
         val layers = JSONArray()
-        for (layer in context.layers()) {
+        val contextLayers = context.layers()
+        for (layer in contextLayers) {
             if (layer.getString("type") == "background") layer.put("id", "background")
-            if (layer.optString("source-layer") in listOf("roads", "water")) {
-                if (layer.optDouble("minzoom", 0.0) >= 8) continue
-                layer.put("maxzoom", minOf(layer.optDouble("maxzoom", 24.0), 8.0))
-            }
             layers.put(layer)
         }
         for (layer in overview.layers()) {
             val id = layer.getString("id")
             if (id == "background" || id == "region-labels") continue
-            if (id == "place-labels") {
+            if (id == "place-labels" && contextLayers.none { it.optString("id") == "context-place-labels" }) {
                 val outside = JSONObject(layer.toString()).put("id", "global-overview-place-labels")
                     .put("source", "context").put("maxzoom", STREET_DETAIL_ZOOM)
                 val localExtent = JSONObject("""{"type":"Polygon","coordinates":[[[73,3],[136,3],[136,54],[73,54],[73,3]]]}""")

@@ -81,6 +81,23 @@ class NativeOnlineOverviewTest {
                 }
                 SystemClock.sleep(1200)
                 screenshot("online05-globe")
+                for ((name, location) in listOf("Paris" to LatLng(48.8566, 2.3522),
+                    "Tokyo" to LatLng(35.6762, 139.6503), "New York" to LatLng(40.7128, -74.0060))) {
+                    scenario.onActivity { activity ->
+                        activity.chooseBasemap(BasemapMode.STREETS)
+                        map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(location, 12.0))
+                    }
+                    await("$name must show bundled roads while disconnected") {
+                        it.queryRenderedFeatures(viewport, "context-detail-major-roads").isNotEmpty()
+                    }
+                }
+                await("New York must retain the land layer when roads overzoom") {
+                    it.queryRenderedFeatures(viewport, "context-land").isNotEmpty()
+                }
+                await("New York must show bundled road labels or route refs") {
+                    it.queryRenderedFeatures(viewport, "context-detail-road-labels").isNotEmpty()
+                }
+                screenshot("online051-new-york-disconnected")
                 scenario.onActivity { activity ->
                     activity.chooseBasemap(BasemapMode.STREETS)
                     map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.92, 116.41), 8.5))

@@ -67,6 +67,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     var picking=false
         set(value) {
             field=value
+            if (BuildConfig.ONLINE_MAPS) map?.uiSettings?.isCompassEnabled = !value
             style?.getLayer("user-photo-covers")?.setProperties(visibility(if(value) Property.NONE else Property.VISIBLE))
             if(value) refreshPickHint() else refresh()
         }
@@ -80,6 +81,10 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             ready.uiSettings.isRotateGesturesEnabled=BuildConfig.ONLINE_MAPS; ready.uiSettings.isTiltGesturesEnabled=false
             ready.uiSettings.isScrollGesturesEnabled=true;ready.uiSettings.isZoomGesturesEnabled=true;ready.uiSettings.isDoubleTapGesturesEnabled=true
             ready.uiSettings.isLogoEnabled=false;ready.uiSettings.isAttributionEnabled=false
+            if (BuildConfig.ONLINE_MAPS) {
+                val density = context.resources.displayMetrics.density
+                ready.uiSettings.setCompassMargins(0, (126 * density).toInt(), (16 * density).toInt(), 0)
+            }
             ready.setMaxZoomPreference(17.0)
             if (BuildConfig.ONLINE_MAPS) {
                 ready.setTileCacheEnabled(true)
@@ -232,7 +237,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 if(layer.optString("id")=="china-display-mask") paint.put("fill-color","#19303d")
                 if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.0)
                 val source = layer.optString("source")
-                val vectorSource = source == "base" || (BuildConfig.ONLINE_MAPS && (source == "overview" || source == "context"))
+                val vectorSource = source == "base" || (BuildConfig.ONLINE_MAPS && (source == "overview" || source.startsWith("context")))
                 if(!satelliteLabels && (layer.optString("type")=="symbol" || vectorSource)) layer.put("layout",(layer.optJSONObject("layout")?:JSONObject()).put("visibility","none"))
                 if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
             }
@@ -247,7 +252,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             val maxZoom=json.optJSONObject("sources")?.let { sources->sources.keys().asSequence().map {sources.getJSONObject(it)}.filter {it.optString("type")=="vector"}.map {it.optDouble("maxzoom",12.0)}.maxOrNull() } ?: 0.0
             (context.applicationContext as? PhotoMapApplication)?.startupDiagnostics?.mapReady()
             onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
-                val overview = if (hasOnlineOverview) "内置中国街道 Z10 和卫星 Z7 · " else ""
+                val worldZoom = json.optJSONObject("sources")?.optJSONObject("context-detail")?.optInt("maxzoom") ?: 0
+                val overview = if (hasOnlineOverview) "内置全球道路 Z$worldZoom、中国街道 Z10 和卫星 Z7 · " else ""
                 "${overview}OpenFreeMap 在线街道 · EOX 2016 卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
             } else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
             if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(overviewCamera())}}
@@ -316,7 +322,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         if(!allowed) {suggestedName="";onPickContext("当前位置超出地图数据范围",false);return}
         val anchor=ready.projection.toScreenLocation(target);val radius=24*context.resources.displayMetrics.density
         val names=listOf("urban-poi-labels","urban-road-labels","urban-roads","poi-labels","road-labels","roads","county-labels","place-labels","locality-labels")
-        val layers=(if (hasOnlineOverview) names + names.map { "embedded-$it" } else names).filter {style?.getLayer(it)!=null}.toTypedArray()
+        val layers=(if (hasOnlineOverview) names + names.map { "embedded-$it" } +
+            names.map { "context-$it" } + names.map { "context-detail-$it" } else names).filter {style?.getLayer(it)!=null}.toTypedArray()
         val features=if(layers.isEmpty()) emptyList() else ready.queryRenderedFeatures(RectF(anchor.x-radius,anchor.y-radius,anchor.x+radius,anchor.y+radius),*layers)
         suggestedName=features.firstNotNullOfOrNull {feature->listOf("name:zh-Hans","name:zh","name","name:en").firstNotNullOfOrNull {key->runCatching {feature.getStringProperty(key)}.getOrNull()?.takeIf {it.isNotBlank()}}} ?: ""
         val coordinates="%.6f, %.6f".format(target.latitude,target.longitude)

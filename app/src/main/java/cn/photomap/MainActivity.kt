@@ -85,6 +85,7 @@ class MainActivity : ComponentActivity() {
     private var pendingIndex by mutableIntStateOf(0)
     private var reviewingImport by mutableStateOf(false)
     private var pickingImportId: String? = null
+    private var searchedPlace: Pair<PhotoPoint, String>? = null
     private var editingPhoto by mutableStateOf<Photo?>(null)
     private var confirmation by mutableStateOf<Pair<String,()->Unit>?>(null)
     private val snack=SnackbarHostState()
@@ -182,6 +183,7 @@ class MainActivity : ComponentActivity() {
         engine.picking = true
     }
     private fun finishPicking() {
+        searchedPlace = null
         if (pickingImportId != null) reviewingImport = true
         pickingImportId = null
         picking = false
@@ -288,7 +290,10 @@ class MainActivity : ComponentActivity() {
                         val photo = pending.firstOrNull { it.photo.id == pickingImportId }?.photo ?: draft?.added?.firstOrNull()
                         PickLocationPanel(photo?.let { library.file(it.thumbnail) },
                             Modifier.align(Alignment.TopCenter).padding(12.dp).widthIn(max = 480.dp).fillMaxWidth(),
-                            engine::focusSearch)
+                            original = photo?.let { library.file(it.original) }) { latitude, longitude, label ->
+                            searchedPlace = PhotoPoint(latitude, longitude) to label
+                            engine.focusSearch(latitude, longitude)
+                        }
                     }
                     Text("＋",Modifier.align(Alignment.Center),style=MaterialTheme.typography.displayMedium,color=MaterialTheme.colorScheme.primary)
                     Surface(Modifier.align(Alignment.BottomCenter).padding(16.dp).widthIn(max=480.dp).fillMaxWidth(),shape=MaterialTheme.shapes.large,shadowElevation=4.dp) {
@@ -300,13 +305,19 @@ class MainActivity : ComponentActivity() {
                                 Button(onClick={
                                 if(!engine.canPick) {message(if (BuildConfig.ONLINE_MAPS) "请选择有效的地图位置" else "请选择中国范围内的位置");return@Button}
                                 val p=engine.center
+                                val searchedName = searchedPlace?.let { (point, label) ->
+                                    val distance = FloatArray(1)
+                                    android.location.Location.distanceBetween(point.latitude, point.longitude, p.latitude, p.longitude, distance)
+                                    label.takeIf { distance[0] <= 80f }
+                                }.orEmpty()
+                                val placeName = searchedName.ifBlank { engine.suggestedName }
                                 val importId = pickingImportId
                                 if (importId != null) {
                                     pending.firstOrNull { it.photo.id == importId }?.let {
-                                        changePending(it.copy(point = PhotoPoint(p.latitude, p.longitude)))
+                                        changePending(it.copy(point = PhotoPoint(p.latitude, p.longitude), placeName = placeName))
                                     }
                                 } else if(adjusting) {draft?.latitude=p.latitude;draft?.longitude=p.longitude}
-                                else draft=Draft(null,null,engine.suggestedName,p.latitude,p.longitude)
+                                else draft=Draft(null,null,placeName,p.latitude,p.longitude)
                                 finishPicking()
                             },enabled=pickAllowed && !busy,modifier=Modifier.weight(1.6f).height(48.dp)) {Text("确定位置")} }
                         }
@@ -345,7 +356,8 @@ class MainActivity : ComponentActivity() {
                             item {
                                 if (BuildConfig.ONLINE_MAPS) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text(place.name, style = MaterialTheme.typography.headlineSmall)
+                                        val title = if (place.name.matches(Regex("""拍摄地点 -?\d+\.\d+, -?\d+\.\d+"""))) "拍摄地点" else place.name
+                                        Text(title, style = MaterialTheme.typography.headlineSmall)
                                         Text("${place.photoCount} 张照片 · ${records.size} 条记录", style = MaterialTheme.typography.labelLarge)
                                         Text("%.6f, %.6f".format(place.latitude, place.longitude), style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -427,7 +439,7 @@ class MainActivity : ComponentActivity() {
                             current.point?.let { engine.focus(it.latitude, it.longitude) }
                         },
                         onApplyDate = { pending = pending.map { if (it.hasDate) it else it.copy(date = current.date) } },
-                        onApplyPoint = { pending = pending.map { if (it.point != null) it else it.copy(point = current.point) } },
+                        onApplyPoint = { pending = pending.map { if (it.point != null) it else it.copy(point = current.point, placeName = current.placeName) } },
                         onSave = { work("正在保存照片") { message("已保存 ${saveReadyImports()} 张照片") } },
                         onDismiss = { reviewingImport = false },
                         onDiscard = {

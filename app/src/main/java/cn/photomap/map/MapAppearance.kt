@@ -34,6 +34,7 @@ object MapAppearance {
                 continue
             }
             val basicId=layer.optString("id").removePrefix("urban-").removePrefix("embedded-")
+                .removePrefix("context-detail-").removePrefix("context-")
             if(mode==BasemapMode.SIMPLE && (basicId in listOf("poi-labels","buildings","landcover","landuse","railways","locality-labels"))) continue
             if(mode==BasemapMode.SIMPLE && basicId=="roads") continue
             if(mode==BasemapMode.SIMPLE && basicId=="road-labels") {

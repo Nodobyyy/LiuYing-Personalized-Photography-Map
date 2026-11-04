@@ -37,10 +37,13 @@ fun DetailMenu(label: String, enabled: Boolean, options: @Composable ColumnScope
     val close = { expanded = false }
     Box {
         TextButton(onClick = { expanded = true }, enabled = enabled) { Text(label) }
-        DropdownMenu(expanded, onDismissRequest = close, containerColor = Color.Transparent) {
-            FrostedPanel {
-                Column { options(close) }
-            }
+        DropdownMenu(
+            expanded, onDismissRequest = close,
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .98f),
+            shadowElevation = 5.dp
+        ) {
+            options(close)
         }
     }
 }

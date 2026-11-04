@@ -34,16 +34,14 @@ fun OnlineMapChrome(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top
         ) {
-            FrostedPanel(
-                modifier = Modifier.weight(1f, fill = false),
-                shape = panel
-            ) {
+            Box(Modifier.weight(1f)) {
+              FrostedPanel(shape = panel) {
                 Column(Modifier.padding(horizontal = 17.dp, vertical = 10.dp)) {
                     Text("留影", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                     Text("$placeCount 个地点 · $photoCount 张照片", style = MaterialTheme.typography.labelSmall)
                 }
+              }
             }
-            Spacer(Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 FrostedPanel(shape = panel) { TextButton(onClick = onMap, enabled = enabled) { Text("底图") } }
                 FrostedPanel(shape = panel) { TextButton(onClick = onData, enabled = enabled) { Text("数据") } }

@@ -4,6 +4,7 @@ import android.location.Address
 import android.location.Geocoder
 import android.os.Build
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -35,7 +37,8 @@ import kotlin.coroutines.resumeWithException
 fun PickLocationPanel(
     thumbnail: File?,
     modifier: Modifier = Modifier,
-    onResult: (Double, Double) -> Unit
+    original: File? = thumbnail,
+    onResult: (Double, Double, String) -> Unit
 ) {
     val context = LocalContext.current
     val focus = LocalFocusManager.current
@@ -44,6 +47,7 @@ fun PickLocationPanel(
     var submitted by remember { mutableStateOf("") }
     var results by remember { mutableStateOf(emptyList<Address>()) }
     var status by remember { mutableStateOf("") }
+    var showPreview by remember { mutableStateOf(false) }
     val submit = {
         focus.clearFocus()
         keyboard?.hide()
@@ -56,7 +60,7 @@ fun PickLocationPanel(
         if (coordinates.size == 2) {
             val (latitude, longitude) = coordinates
             if (latitude != null && longitude != null && latitude in -90.0..90.0 && longitude in -180.0..180.0) {
-                onResult(latitude, longitude)
+                onResult(latitude, longitude, "")
                 status = ""
                 submitted = ""
                 return@LaunchedEffect
@@ -84,7 +88,11 @@ fun PickLocationPanel(
     FrostedPanel(modifier) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             thumbnail?.let {
-                AsyncImage(it, "当前导入的照片", Modifier.fillMaxWidth().height(74.dp), contentScale = ContentScale.Fit)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    AsyncImage(it, "当前导入的照片", Modifier.size(74.dp).clickable { showPreview = true },
+                        contentScale = ContentScale.Crop)
+                    TextButton(onClick = { showPreview = true }) { Text("查看待定位照片") }
+                }
             }
             OutlinedTextField(
                 query, { query = it.take(160); results = emptyList(); status = ""; submitted = "" },
@@ -100,11 +108,17 @@ fun PickLocationPanel(
                     Text(label, Modifier.fillMaxWidth().clickable {
                         query = label
                         results = emptyList()
-                        onResult(address.latitude, address.longitude)
+                        onResult(address.latitude, address.longitude, label)
                     }.padding(vertical = 10.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
             }
             if (results.isNotEmpty()) Text("地点搜索 · Android / Photon · © OpenStreetMap", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+    if (showPreview && thumbnail != null) FullScreenDialog(onDismiss = { showPreview = false }, dark = true) {
+        Column(Modifier.fillMaxSize().background(androidx.compose.ui.graphics.Color.Black).safeDrawingPadding()) {
+            TextButton(onClick = { showPreview = false }) { Text("返回地图", color = androidx.compose.ui.graphics.Color.White) }
+            AsyncImage(original, "待定位照片预览", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
         }
     }
 }

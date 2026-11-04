@@ -24,13 +24,14 @@ data class PendingPhoto(
     val photo: Photo,
     val point: PhotoPoint?,
     val date: String = photo.date,
-    val camera: Map<String, String> = emptyMap()
+    val camera: Map<String, String> = emptyMap(),
+    val placeName: String = ""
 ) {
     val hasDate get() = runCatching { LocalDate.parse(date) }.isSuccess
     fun placement(): PhotoPlacement? {
         if (!hasDate || point?.inCoverage != true) return null
         val exif = if (camera.isEmpty()) photo.exif else JSONObject(photo.exif).withCameraOverrides(camera).toString()
-        return PhotoPlacement(photo.copy(date = date, exif = exif), point)
+        return PhotoPlacement(photo.copy(date = date, exif = exif), point, placeName)
     }
 }
 

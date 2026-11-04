@@ -41,7 +41,19 @@ node --test tools/map-bundle.test.mjs
 
 Online APK 输出位于 `app/build/outputs/apk/online/debug`。需使用阿里云 Maven 镜像时加 `-PuseMirror=true`。原生测试使用 `assembleOnlineDebugAndroidTest`，测试源码在 `app/src/androidTest`，应在专用模拟器或测试机运行。
 
-要构建带内置概览的 Online APK，先准备下方所列三份 PMTiles，再运行 `node tools/fetch-world-satellite.mjs .tooling/world-satellite.pmtiles <pmtiles 可执行文件路径>` 和 `node tools/stage-online-overview.mjs app/src/offline/assets/maps <pmtiles 可执行文件路径>`。此步骤校验并打包全球 Z6 矢量概览、全球 Z2 卫星概览、中国 Z10 街道和中国 Z7 卫星概览。未准备内置资源时，源码仍可构建按需联网的开发包。
+带内置概览的 Online APK 包含全球 Z8 矢量概览和 Z9 主要道路补充层，可在联网细节加载前显示道路及已有路名。小街巷、建筑和景点细节继续按视野联网获取。中国 Z10 街道概览和 Z7 卫星概览也随包提供。
+
+准备下方历史离线版构建步骤所列的基础资源，并将 PMTiles CLI 放到 `.tooling/pmtiles/pmtiles.exe`。使用同一天的 Protomaps 数据制作全球概览：
+
+```powershell
+.tooling/pmtiles/pmtiles.exe extract https://build.protomaps.com/20261101.pmtiles .tooling/world-z9.pmtiles --maxzoom=9
+node tools/compact-streets.mjs .tooling/world-z9.pmtiles .tooling/world-z8-compact.pmtiles 8
+node tools/compact-streets.mjs .tooling/world-z9.pmtiles .tooling/world-roads-z9.pmtiles 9 --roads-only --major-top
+node tools/fetch-world-satellite.mjs
+node tools/stage-online-overview.mjs
+```
+
+准备完资源后再运行 Gradle 构建命令。未准备地图资源时也可构建按需联网的开发包。
 
 <details>
 <summary>历史离线版构建步骤</summary>
