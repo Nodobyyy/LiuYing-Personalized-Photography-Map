@@ -1,0 +1,7 @@
+# Map manifests verify exact file bytes on every platform.
+app/src/offline/assets/maps/** -text
+app/src/online/assets/maps/** -text
+app/src/offline/assets/maps/FONT-LICENSE.txt whitespace=-blank-at-eol
+app/src/online/assets/maps/FONT-LICENSE.txt whitespace=-blank-at-eol
+gradlew text eol=lf
+gradlew.bat text eol=crlf

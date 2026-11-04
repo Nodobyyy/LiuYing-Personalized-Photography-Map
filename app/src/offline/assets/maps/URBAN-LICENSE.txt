@@ -1,0 +1,5 @@
+GHSL Urban Centre Database R2024A, reference epoch 2025, European Commission / Joint Research Centre.
+Source: https://human-settlement.emergency.copernicus.eu/ghs_ucdb_2024.php
+Official feature service: https://services2.arcgis.com/jUpNdisbWqRpMo35/ArcGIS/rest/services/Urban_Centers_Database_2024_Socioeconomic/FeatureServer
+Index contains 1995 urban-centre polygons for China including Taiwan, used only to select/describe satellite detail coverage. Country categories removed from distributed metadata. Not an administrative boundary source and not every village/new development is an Urban Centre. Street data coverage is the complete China extraction, independent of this index.
+European Commission reuse policy: https://commission.europa.eu/legal-notice_en

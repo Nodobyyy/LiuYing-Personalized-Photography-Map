@@ -1,0 +1,17 @@
+.tooling/
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+deliverables/
+.kotlin/
+*.apk
+*.zip
+*.pmtiles
+*.mbtiles
+!app/src/test/resources/region.pmtiles
+*.jks
+*.keystore
+/版图.jpg
+/待完成报告.md

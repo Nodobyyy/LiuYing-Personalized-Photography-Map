@@ -1,0 +1,7 @@
+Protomaps basemap 2026-11-01 v4.15.2, derived from OpenStreetMap and Natural Earth.
+ODbL Produced Work. Attribution: Protomaps / OpenStreetMap contributors.
+Source: https://build.protomaps.com/20261101.pmtiles
+https://docs.protomaps.com/basemaps/downloads
+https://www.openstreetmap.org/copyright
+https://opendatacommons.org/licenses/odbl/1-0/
+APK China bbox 73,3,136,54 Z0-10 compact overview. Retained feature geometry unchanged; unused layers/attributes removed. Global context Z0-6 from same source. National fine package Z0-15 is imported separately. Fonts SIL OFL, see FONT-LICENSE.txt. China display references see VIEW-SOURCES.txt. Satellite/index see SATELLITE-LICENSE.txt / URBAN-LICENSE.txt.

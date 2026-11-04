@@ -1,0 +1,7 @@
+Sentinel-2 cloudless 2016 by EOX IT Services GmbH. Contains modified Copernicus Sentinel data 2016.
+Creative Commons Attribution 4.0 International: https://creativecommons.org/licenses/by/4.0/
+Attribution/source: https://maps.eox.at/ and https://cloudless.eox.at/
+Primary license evidence: https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml (s2cloudless_3857 abstract).
+APK includes China overview bbox 73,3,136,54 Z0-7 only. Imported national fine package adds urban imagery Z8-14. Imagery year 2016, not live/current. Sensor nominal 10m; overview is coarser.
+Fine imagery is retrieved through standard WMS EPSG:3857 pixel-aligned windows, cropped to the exact XYZ tile grid and JPEG encoded. See fetch-urban-wms.mjs / crop-urban-wms.ps1. No fabricated imagery or coordinate shift.
+No EOX/Copernicus endorsement or formal China map approval is claimed.

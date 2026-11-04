@@ -1,0 +1,8 @@
+import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import zlib from 'node:zlib';
+function fields(b){let p=0;function v(){let n=0,m=1;while(true){const a=b[p++];if(a===undefined)throw Error('Truncated');n+=(a&127)*m;if(a<128)return n;m*=128;}}const r=[];while(p<b.length){const start=p,t=v(),id=t>>3,wire=t&7;let value;if(wire===2){const n=v();value=b.subarray(p,p+n);p+=n;}else if(wire===0)v();else if(wire===1)p+=8;else if(wire===5)p+=4;else throw Error('wire');r.push({id,value,raw:b.subarray(start,p)});}return r;}
+function tile(file,z,x,y){const bytes=execFileSync('.tooling/pmtiles/pmtiles.exe',['tile',file,String(z),String(x),String(y)],{maxBuffer:16*1024*1024});return new Map(fields(zlib.gunzipSync(bytes)).filter(f=>f.id===3).map(f=>{const l=fields(f.value);return[l.find(v=>v.id===1).value.toString(),l.filter(v=>v.id===2).map(v=>Buffer.concat(fields(v.value).filter(p=>p.id!==2).map(p=>p.raw)).toString('hex'))];}));}
+let features=0;for(const [lat,lon]of[[39.882,116.412],[30.662,104.066],[31.23,121.47],[22.54,114.06],[25.03,121.56],[29.65,91.12],[45.8,126.53]])for(const z of [8,12]){
+ const n=2**z,x=Math.floor((lon+180)/360*n),y=Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*n),a=tile('.tooling/china-z13.pmtiles',z,x,y),b=tile('.tooling/china-streets-z12-compact.pmtiles',z,x,y);
+ for(const [name,geometry]of b){assert(['earth','water','roads','places','pois'].includes(name));assert.deepEqual(geometry,a.get(name),`${lat},${lon} Z${z} ${name} geometry changed`);features+=geometry.length;}
+}
+console.log(`PASS: retained geometry/IDs/types match source across 14 city/zoom samples (${features} features), including water/roads/POIs.`);

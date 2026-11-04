@@ -1,0 +1,28 @@
+{
+  "version": 8,
+  "sources": {
+    "satellite-overview": {
+      "type": "raster",
+      "url": "pmtiles://local://satellite-overview.pmtiles",
+      "tileSize": 256,
+      "minzoom": 0,
+      "maxzoom": 7,
+      "bounds": [
+        73,
+        3,
+        136,
+        54
+      ]
+    }
+  },
+  "layers": [
+    {
+      "id": "satellite-overview",
+      "type": "raster",
+      "source": "satellite-overview",
+      "paint": {
+        "raster-fade-duration": 0
+      }
+    }
+  ]
+}

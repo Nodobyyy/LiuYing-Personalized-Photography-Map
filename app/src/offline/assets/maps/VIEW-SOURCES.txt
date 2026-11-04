@@ -1,0 +1,9 @@
+China display references: chinese-global-compliant-geodata, MIT license; see BOUNDARY-LICENSE.txt.
+Pinned commit: 3cf3485789876c37be6193bf2848cf9aaa40f758
+https://github.com/JayMuShui/chinese-global-compliant-geodata/blob/3cf3485789876c37be6193bf2848cf9aaa40f758/src/geojson/countries/as/chn/global/chn-level-1.json
+Upstream documentation identifies Tianditu / National Platform for Common Geospatial Information Services as its source and WGS84 as its coordinate system.
+Source SHA256: 11c45e97b70165dfb2bc0c5c8e428108a4723d055e8ffa1663b5eb05783e15d3
+All 34 provinces and all 8 boundary-line features are retained, including South China Sea reference lines and island polygons. Province polygons are unioned for display masking; label positions are computed inside their main polygon.
+Natural Earth is NOT used for the China display boundary. No GCJ-02 shapes are mixed into the WGS84 street map.
+User-provided reference: 版图.jpg, printed approval GS(2019)1818. That approval belongs to the supplied reference image, not this modified interactive map.
+This third-party dataset and the rendered interactive map have NOT received a fresh official boundary/publication certification. No approval number is claimed for the application.
