@@ -26,6 +26,7 @@ import androidx.core.view.WindowCompat
                 if(Build.VERSION.SDK_INT>=30) it.attributes=it.attributes.apply {setFitInsetsTypes(0)}
                 if(Build.VERSION.SDK_INT>=29) it.isNavigationBarContrastEnforced=false
                 it.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT)
+                it.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                 it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb()))
                 it.statusBarColor=background.toArgb();it.navigationBarColor=background.toArgb()
                 WindowCompat.getInsetsController(it,view).apply {isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark}

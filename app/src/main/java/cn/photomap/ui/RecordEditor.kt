@@ -28,7 +28,7 @@ class Draft(val placeId: String?, val recordId: String?, initialName: String, la
 @Composable fun RecordEditor(draft: Draft, library: Library, busy: Boolean, onCancel: ()->Unit, onPick: ()->Unit, onMove: ()->Unit, onRemove: (Photo)->Unit, onSave: ()->Unit) {
     val valid=runCatching { LocalDate.parse(draft.date) }.isSuccess && draft.name.length<=200 && draft.title.length<=500 && draft.note.length<=100000 && (draft.added.isNotEmpty() || draft.existing.isNotEmpty())
     FullScreenDialog(onDismiss={ if(!busy) onCancel() }) {
-        Surface(Modifier.fillMaxSize()) {
+        EditorPanel {
             Column(Modifier.systemBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal=12.dp),horizontalArrangement=Arrangement.SpaceBetween) {
                     TextButton(onClick=onCancel,enabled=!busy) { Text("取消") }

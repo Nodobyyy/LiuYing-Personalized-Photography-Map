@@ -1,6 +1,7 @@
 package cn.photomap
 
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -22,6 +23,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
@@ -55,7 +60,7 @@ class MainActivity : ComponentActivity() {
     private var busy by mutableStateOf(false)
     private var progress by mutableStateOf("")
     private var lastMessage by mutableStateOf("")
-    private var mapStatus by mutableStateOf("正在打开离线地图")
+    private var mapStatus by mutableStateOf(if (BuildConfig.ONLINE_MAPS) "正在打开地图" else "正在打开离线地图")
     private var mapInfo by mutableStateOf("")
     private var mapOptions by mutableStateOf(false)
     private var basemapMode by mutableStateOf(BasemapMode.STREETS)
@@ -72,9 +77,20 @@ class MainActivity : ComponentActivity() {
     }
     private var viewer by mutableStateOf<List<ViewedPhoto>>(emptyList())
     private var viewerPage by mutableIntStateOf(0)
+    private var memoryViewer by mutableStateOf(false)
+    private var memoryDay: LocalDate? = null
+    private var memoryDays by mutableStateOf<List<PhotoDay>?>(null)
+    private var memoryToday = LocalDate.now()
+    private var pending by mutableStateOf<List<PendingPhoto>>(emptyList())
+    private var pendingIndex by mutableIntStateOf(0)
+    private var reviewingImport by mutableStateOf(false)
+    private var pickingImportId: String? = null
     private var editingPhoto by mutableStateOf<Photo?>(null)
     private var confirmation by mutableStateOf<Pair<String,()->Unit>?>(null)
     private val snack=SnackbarHostState()
+    private val directPhotos = if (BuildConfig.ONLINE_MAPS) {
+        registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments(), ::importDirectPhotos)
+    } else null
     private val photos=registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(100)) { uris ->
         val editing=draft
         if(uris.isNotEmpty() && editing!=null) work("正在导入照片") {
@@ -85,7 +101,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     private val backup=registerForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri->if(uri!=null) work("正在完整备份") {library.backup(uri);message("备份完成，包含数据库与全部原图；离线地图可重建，不重复备份") } }
-    private val restore=registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri->if(uri!=null) confirmation="恢复会替换当前作品，请先导出备份。只有全部校验通过后才会切换数据。" to {work("正在校验并恢复") { library.restore(uri);coil.Coil.imageLoader(this).memoryCache?.clear();withContext(Dispatchers.IO) {coil.Coil.imageLoader(this@MainActivity).diskCache?.clear()};selected=null;records=emptyList();viewer=emptyList();reload();message("恢复完成") }} }
+    private val restore=registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri->if(uri!=null) confirmation="恢复会替换当前作品，请先导出备份。只有全部校验通过后才会切换数据。" to {work("正在校验并恢复") { library.restore(uri);pending=emptyList();pendingIndex=0;reviewingImport=false;coil.Coil.imageLoader(this).memoryCache?.clear();withContext(Dispatchers.IO) {coil.Coil.imageLoader(this@MainActivity).diskCache?.clear()};selected=null;records=emptyList();viewer=emptyList();reload();message("恢复完成") }} }
     private val importMap=registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri->if(uri!=null) work("正在导入离线地图包") {
         packages.import(uri) {done,total,verifying->runOnUiThread {progress=if(verifying) "正在校验地图文件" else if(total>0) "正在导入地图 ${(done*100/total).coerceIn(0,100)}%" else "正在导入地图 ${done/1048576} MB"}}
         maps=withContext(Dispatchers.IO) {packages.list()};engine.reloadPackages();message("地区地图导入完成，视野完整进入覆盖范围后自动切换")
@@ -141,9 +157,16 @@ class MainActivity : ComponentActivity() {
         selected=selected?.let {old->places.firstOrNull {it.id==old.id}}
         records=selected?.let {library.records(it.id)} ?: emptyList()
         if(::engine.isInitialized && !startupError) engine.update(places,selected?.id)
+        if (memoryDays != null) memoryDays = library.photoDays().filter { it.date <= memoryToday }
         if(viewer.isNotEmpty()) {
             val current=viewer.getOrNull(viewerPage)?.photo?.id
-            viewer=records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}}
+            viewer = if (memoryViewer) {
+                val days = memoryDays.orEmpty()
+                val day = days.firstOrNull { entry -> entry.photos.any { it.photo.id == current } }
+                    ?: days.firstOrNull { it.date == memoryDay }
+                memoryDay = day?.date
+                day?.photos?.map { ViewedPhoto(it.photo, it.record) }.orEmpty()
+            } else records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}}
             val currentIndex=viewer.indexOfFirst {it.photo.id==current}
             viewerPage=if(currentIndex>=0) currentIndex else viewerPage.coerceIn(0,maxOf(0,viewer.lastIndex))
         }
@@ -153,6 +176,57 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch { runCatching {library.records(place.id)}.onSuccess {if(selected?.id==place.id) records=it}.onFailure {message("无法读取该地点，请重试")} }
     }
     private fun closePlace() {selected=null;records=emptyList();engine.update(places,null)}
+    private fun startPicking() {
+        closePlace()
+        picking = true
+        engine.picking = true
+    }
+    private fun finishPicking() {
+        if (pickingImportId != null) reviewingImport = true
+        pickingImportId = null
+        picking = false
+        adjusting = false
+        engine.picking = false
+    }
+    private fun beginDirectImport() {
+        if (pending.isNotEmpty()) reviewingImport = true
+        else launchSystemPicker { directPhotos?.launch(arrayOf("image/*")) }
+    }
+    private fun importDirectPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        work("正在读取原图和拍摄信息") {
+            val imported = library.import(uris.take(100)) { done, total ->
+                runOnUiThread { progress = "正在读取原图 $done / $total" }
+            }
+            pending = imported.photos.map { PendingPhoto(it, it.exifPoint()) }
+            pendingIndex = 0
+            reviewingImport = pending.isNotEmpty()
+            val saved = saveReadyImports()
+            message("已保存 $saved 张" +
+                (if (pending.isNotEmpty()) " · ${pending.size} 张待补填" else "") +
+                (if (imported.failed > 0) " · ${imported.failed} 张无法读取" else "") +
+                (if (imported.duplicates > 0) " · 保留 ${imported.duplicates} 张重复照片" else "") +
+                (if (uris.size > 100) " · 单批最多读取 100 张" else ""))
+        }
+    }
+    private suspend fun saveReadyImports(): Int {
+        val placements = pending.mapNotNull { it.placement() }
+        if (placements.isEmpty()) return 0
+        library.saveLocatedPhotos(placements)
+        val saved = placements.map { it.photo.id }.toSet()
+        pending = pending.filterNot { it.photo.id in saved }
+        pendingIndex = pendingIndex.coerceAtMost(maxOf(0, pending.lastIndex))
+        reviewingImport = pending.isNotEmpty()
+        reload()
+        return placements.size
+    }
+    private fun changePending(item: PendingPhoto) {
+        pending = pending.map { if (it.photo.id == item.photo.id) item else it }
+    }
+    private fun openMemories() = work("正在整理拍摄日期") {
+        memoryToday = LocalDate.now()
+        memoryDays = library.photoDays().filter { it.date <= memoryToday }
+    }
     private fun cancelDraft() {
         val old=draft ?: return
         confirmation="放弃尚未保存的修改及新导入照片？已有作品不会改变。" to {
@@ -174,9 +248,30 @@ class MainActivity : ComponentActivity() {
             enableEdgeToEdge(statusBarStyle=bars,navigationBarStyle=bars)
             engine.theme(dark)
         }
-        MaterialTheme(colorScheme=if(dark) darkColorScheme(primary=androidx.compose.ui.graphics.Color(0xffa8c9b7)) else lightColorScheme(primary=androidx.compose.ui.graphics.Color(0xff315b49))) {
+        val colors = when {
+            BuildConfig.ONLINE_MAPS && dark -> darkColorScheme(
+                primary = Color(0xffb4d8c7), primaryContainer = Color(0xff244b40),
+                secondaryContainer = Color(0xff354640), surface = Color(0xff171f1d), surfaceVariant = Color(0xff26332f)
+            )
+            BuildConfig.ONLINE_MAPS -> lightColorScheme(
+                primary = Color(0xff285749), primaryContainer = Color(0xffc9e8da),
+                secondaryContainer = Color(0xffe0ebe5), surface = Color(0xfffbfaf5), surfaceVariant = Color(0xffe9eee7)
+            )
+            dark -> darkColorScheme(primary = Color(0xffa8c9b7))
+            else -> lightColorScheme(primary = Color(0xff315b49))
+        }
+        val panelOpen = selected != null || settings || mapOptions || picking || reviewingImport || draft != null
+        var backdrop by remember { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(panelOpen) {
+            if (BuildConfig.ONLINE_MAPS && panelOpen && android.os.Build.VERSION.SDK_INT >= 31) {
+                engine.snapshot { backdrop = it.asImageBitmap() }
+            } else backdrop = null
+        }
+        MaterialTheme(colorScheme=colors) {
+            CompositionLocalProvider(LocalMapBackdrop provides backdrop) {
             Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).systemBarsPadding()) {
                 AndroidView(factory={engine.view},modifier=Modifier.fillMaxSize())
+                if (!BuildConfig.ONLINE_MAPS) {
                 Surface(Modifier.align(Alignment.TopStart).padding(16.dp),shape=MaterialTheme.shapes.large,shadowElevation=3.dp) {
                     Column(Modifier.padding(horizontal=16.dp,vertical=10.dp)) {Text(if(BuildConfig.ONLINE_MAPS) "留影·联网" else "留影·离线",style=MaterialTheme.typography.titleLarge);Text("${places.size} 个地点 · ${places.sumOf {it.photoCount}} 张照片",style=MaterialTheme.typography.bodySmall)}
                 }
@@ -187,22 +282,44 @@ class MainActivity : ComponentActivity() {
                 if(!picking && (mapInfo.isNotBlank() || places.isEmpty())) Surface(Modifier.align(Alignment.BottomStart).padding(start=12.dp,end=110.dp,bottom=72.dp).clickable {mapOptions=true},shape=MaterialTheme.shapes.medium,color=MaterialTheme.colorScheme.surface.copy(alpha=0.94f)) {
                     Text(mapInfo.ifBlank {"点 ＋，记录第一处光影。"},Modifier.padding(10.dp),style=MaterialTheme.typography.bodySmall)
                 }
+                }
                 if(picking) {
+                    if (BuildConfig.ONLINE_MAPS) {
+                        val photo = pending.firstOrNull { it.photo.id == pickingImportId }?.photo ?: draft?.added?.firstOrNull()
+                        PickLocationPanel(photo?.let { library.file(it.thumbnail) },
+                            Modifier.align(Alignment.TopCenter).padding(12.dp).widthIn(max = 480.dp).fillMaxWidth(),
+                            engine::focusSearch)
+                    }
                     Text("＋",Modifier.align(Alignment.Center),style=MaterialTheme.typography.displayMedium,color=MaterialTheme.colorScheme.primary)
                     Surface(Modifier.align(Alignment.BottomCenter).padding(16.dp).widthIn(max=480.dp).fillMaxWidth(),shape=MaterialTheme.shapes.large,shadowElevation=4.dp) {
                         Column(Modifier.padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                             Text("移动地图，将拍摄位置对准准星",textAlign=TextAlign.Center,style=MaterialTheme.typography.titleSmall)
                             Text(pickHint.ifBlank {"正在读取位置"},textAlign=TextAlign.Center,style=MaterialTheme.typography.bodySmall)
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                                OutlinedButton(onClick={picking=false;adjusting=false;engine.picking=false},modifier=Modifier.weight(1f).height(48.dp)) {Text("取消")}
+                                OutlinedButton(onClick=::finishPicking,modifier=Modifier.weight(1f).height(48.dp)) {Text("取消")}
                                 Button(onClick={
-                                if(!engine.canPick) {message("请选择中国范围内的位置");return@Button}
+                                if(!engine.canPick) {message(if (BuildConfig.ONLINE_MAPS) "请选择有效的地图位置" else "请选择中国范围内的位置");return@Button}
                                 val p=engine.center
-                                if(adjusting) {draft?.latitude=p.latitude;draft?.longitude=p.longitude} else draft=Draft(null,null,engine.suggestedName,p.latitude,p.longitude)
-                                picking=false;adjusting=false;engine.picking=false
+                                val importId = pickingImportId
+                                if (importId != null) {
+                                    pending.firstOrNull { it.photo.id == importId }?.let {
+                                        changePending(it.copy(point = PhotoPoint(p.latitude, p.longitude)))
+                                    }
+                                } else if(adjusting) {draft?.latitude=p.latitude;draft?.longitude=p.longitude}
+                                else draft=Draft(null,null,engine.suggestedName,p.latitude,p.longitude)
+                                finishPicking()
                             },enabled=pickAllowed && !busy,modifier=Modifier.weight(1.6f).height(48.dp)) {Text("确定位置")} }
                         }
                     }
+                } else if (BuildConfig.ONLINE_MAPS) {
+                    val satellite = if (basemapMode == BasemapMode.SATELLITE) "EOX · Sentinel 2016\n" else ""
+                    OnlineMapChrome(
+                        places.size, places.sumOf { it.photoCount }, pending.size, mapInfo,
+                        satellite + "© OSM contributors · © OpenMapTiles · OpenFreeMap" +
+                            if (engine.hasOnlineOverview) " · Protomaps" else "",
+                        !busy, { mapOptions = true }, { settings = true }, { engine.national() },
+                        ::startPicking, ::beginDirectImport, ::openMemories
+                    )
                 } else {
                     Column(Modifier.align(Alignment.BottomEnd).padding(20.dp),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         FilledTonalButton(onClick={engine.national()},enabled=!busy) {Text("全国")}
@@ -220,26 +337,69 @@ class MainActivity : ComponentActivity() {
                 if(busy) Surface(Modifier.align(Alignment.Center).padding(24.dp),shape=MaterialTheme.shapes.large,shadowElevation=8.dp) {
                     Column(Modifier.padding(24.dp),horizontalAlignment=Alignment.CenterHorizontally) {CircularProgressIndicator();Spacer(Modifier.height(12.dp));Text(progress)}
                 }
-                BackHandler(enabled=picking) {picking=false;adjusting=false;engine.picking=false}
+                BackHandler(enabled=picking, onBack=::finishPicking)
                 if(selected!=null && draft==null && !picking && !settings) {
                     val place=selected!!
-                    ModalBottomSheet(onDismissRequest={if(!busy) closePlace()},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=false)) {
+                    MapPanelSheet(onDismissRequest={if(!busy) closePlace()},skipPartiallyExpanded=false) {
                         LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(start=20.dp,end=20.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
                             item {
+                                if (BuildConfig.ONLINE_MAPS) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text(place.name, style = MaterialTheme.typography.headlineSmall)
+                                        Text("${place.photoCount} 张照片 · ${records.size} 条记录", style = MaterialTheme.typography.labelLarge)
+                                        Text("%.6f, %.6f".format(place.latitude, place.longitude), style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Button(onClick = { draft = Draft(place.id, null, place.name, place.latitude, place.longitude) }, enabled = !busy) { Text("添加记录") }
+                                            if (records.size > 1) DetailMenu("地点选项", !busy) { close ->
+                                                DropdownMenuItem(text = { Text("删除整个地点", color = MaterialTheme.colorScheme.error) }, onClick = {
+                                                    close()
+                                                    confirmation = "删除“${place.name}”及全部应用内照片？系统相册原件不受影响。" to {
+                                                        work("正在删除地点") { library.removePlace(place.id); closePlace(); reload() }
+                                                    }
+                                                })
+                                            }
+                                        }
+                                    }
+                                } else {
                                 Text(place.name,style=MaterialTheme.typography.headlineSmall);Text("${place.photoCount} 张照片 · %.6f, %.6f".format(place.latitude,place.longitude),style=MaterialTheme.typography.bodySmall)
                                 Row {TextButton(onClick={draft=Draft(place.id,null,place.name,place.latitude,place.longitude)},enabled=!busy) {Text("添加记录")};TextButton(onClick={confirmation="删除“${place.name}”及全部应用内照片？系统相册原件不受影响。" to {work("正在删除地点") {library.removePlace(place.id);closePlace();reload()}}},enabled=!busy) {Text("删除地点")}}
+                                }
                             }
                             items(records,key={it.id}) {record->
-                                Column {
+                                val edit = { draft = Draft(place.id, record.id, place.name, place.latitude, place.longitude, record.title, record.note, record.date, record.photos) }
+                                val remove = {
+                                    val prompt = if (BuildConfig.ONLINE_MAPS && records.size == 1)
+                                        "删除最后一条记录及其应用内照片？空地点也会一并移除。"
+                                    else "删除这条摄影记录及其应用内照片？"
+                                    confirmation = prompt to { work("正在删除记录") { library.removeRecord(record.id); reload() } }
+                                }
+                                val card = if (BuildConfig.ONLINE_MAPS) Modifier.fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.large).background(MaterialTheme.colorScheme.surface.copy(alpha = .55f)).padding(14.dp)
+                                else Modifier
+                                Column(card, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (BuildConfig.ONLINE_MAPS) Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(record.title.ifBlank { "摄影记录" }, style = MaterialTheme.typography.titleMedium)
+                                            Text(record.date, style = MaterialTheme.typography.labelMedium)
+                                        }
+                                        DetailMenu("记录选项", !busy) { close ->
+                                            DropdownMenuItem(text = { Text("编辑记录 / 地点") }, onClick = { close(); edit() })
+                                            DropdownMenuItem(text = { Text("删除记录", color = MaterialTheme.colorScheme.error) }, onClick = { close(); remove() })
+                                        }
+                                    } else {
                                     Text(record.title.ifBlank {"摄影记录"},style=MaterialTheme.typography.titleMedium);Text(record.date,style=MaterialTheme.typography.labelMedium)
+                                    }
                                     if(record.note.isNotBlank()) Text(record.note,modifier=Modifier.padding(vertical=8.dp))
                                     LazyRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {items(record.photos,key={it.id}) {photo->
-                                        AsyncImage(library.file(photo.thumbnail),contentDescription=photo.title.ifBlank {photo.filename},contentScale=ContentScale.Crop,modifier=Modifier.size(132.dp).clickable {
-                                            viewer=records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}};viewerPage=viewer.indexOfFirst {it.photo.id==photo.id}
+                                        AsyncImage(library.file(photo.thumbnail),contentDescription=photo.title.ifBlank {photo.filename},contentScale=ContentScale.Crop,modifier=Modifier.size(132.dp).then(if (BuildConfig.ONLINE_MAPS) Modifier.clip(MaterialTheme.shapes.medium) else Modifier).clickable {
+                                            memoryViewer=false;viewer=records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}};viewerPage=viewer.indexOfFirst {it.photo.id==photo.id}
                                         })
                                     }}
-                                    Row {TextButton(onClick={draft=Draft(place.id,record.id,place.name,place.latitude,place.longitude,record.title,record.note,record.date,record.photos)},enabled=!busy) {Text("编辑记录 / 地点")};TextButton(onClick={confirmation="删除这条摄影记录及其应用内照片？" to {work("正在删除记录") {library.removeRecord(record.id);reload()}}},enabled=!busy) {Text("删除记录")}}
-                                    HorizontalDivider()
+                                    if (!BuildConfig.ONLINE_MAPS) {
+                                        Row {TextButton(onClick=edit,enabled=!busy) {Text("编辑记录 / 地点")};TextButton(onClick=remove,enabled=!busy) {Text("删除记录")}}
+                                        HorizontalDivider()
+                                    }
                                 }
                             }
                         }
@@ -249,22 +409,66 @@ class MainActivity : ComponentActivity() {
                 if(draft!=null && !picking) RecordEditor(draft!!,library,busy,::cancelDraft,{launchSystemPicker {photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))}},{adjusting=true;picking=true;engine.picking=true;draft?.let {engine.focus(it.latitude,it.longitude)}},{photo->
                     val current=draft!!; work("正在移除未保存照片") {library.discard(listOf(photo));current.added.remove(photo)}
                 },::saveDraft)
-                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList()},{editingPhoto=it},{photo->confirmation="删除这张应用内照片？系统相册中的原件不受影响。最后一张照片删除后，空记录和空地点也会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
+                memoryDays?.let { days ->
+                    Memories(days, memoryToday.minusYears(1), dark, library, { memoryDays = null }) { day, index ->
+                        memoryViewer = true
+                        memoryDay = day.date
+                        viewer = day.photos.map { ViewedPhoto(it.photo, it.record) }
+                        viewerPage = index
+                    }
+                }
+                if (reviewingImport && !picking && pending.isNotEmpty()) {
+                    val current = pending[pendingIndex]
+                    ImportReview(pending, pendingIndex, busy, dark, library, { pendingIndex = it }, ::changePending,
+                        onPick = {
+                            pickingImportId = current.photo.id
+                            reviewingImport = false
+                            startPicking()
+                            current.point?.let { engine.focus(it.latitude, it.longitude) }
+                        },
+                        onApplyDate = { pending = pending.map { if (it.hasDate) it else it.copy(date = current.date) } },
+                        onApplyPoint = { pending = pending.map { if (it.point != null) it else it.copy(point = current.point) } },
+                        onSave = { work("正在保存照片") { message("已保存 ${saveReadyImports()} 张照片") } },
+                        onDismiss = { reviewingImport = false },
+                        onDiscard = {
+                            confirmation = "放弃这批尚未保存的照片？已保存的作品和系统原图会保留。" to {
+                                work("正在清理待补填照片") {
+                                    library.discard(pending.map { it.photo })
+                                    pending = emptyList()
+                                    pendingIndex = 0
+                                    reviewingImport = false
+                                }
+                            }
+                        }
+                    )
+                }
+                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList();memoryViewer=false},{editingPhoto=it},{photo->confirmation="删除这张应用内照片？系统相册中的原件不受影响。最后一张照片删除后，空记录和空地点也会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
                 if(editingPhoto!=null) {
                     val photo=editingPhoto!!
                     var title by remember(photo.id) {mutableStateOf(photo.title)};var note by remember(photo.id) {mutableStateOf(photo.note)};var date by remember(photo.id) {mutableStateOf(photo.date)}
                     var parameters by remember(photo.id) {mutableStateOf(runCatching {org.json.JSONObject(photo.exif).optString("manual_parameters")}.getOrDefault(""))}
+                    var camera by remember(photo.id) { mutableStateOf(if (BuildConfig.ONLINE_MAPS) photo.cameraOverrides() else emptyMap()) }
+                    var showCamera by remember(photo.id) { mutableStateOf(false) }
                     AlertDialog(onDismissRequest={if(!busy) editingPhoto=null},title={Text("照片文字与参数")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(title,{title=it.take(500)},label={Text("标题（空白使用记录标题）")});OutlinedTextField(date,{date=it},label={Text("日期 YYYY-MM-DD（可空）")});OutlinedTextField(note,{note=it.take(100000)},label={Text("心得（空白使用记录心得）")},maxLines=5)
                         OutlinedTextField(parameters,{parameters=it.take(2500)},label={Text("摄影参数补充 / 更正（可空）")},maxLines=3);Text("只修改应用内说明，不改动原图 EXIF。",style=MaterialTheme.typography.bodySmall)
-                    }},confirmButton={TextButton(onClick={work("正在保存照片文字") {library.editPhoto(photo,title,note,date,parameters);editingPhoto=null;reload()}},enabled=!busy && (date.isBlank() || runCatching {LocalDate.parse(date)}.isSuccess)) {Text("保存")}},dismissButton={TextButton(onClick={editingPhoto=null},enabled=!busy) {Text("取消")}})
+                        if (BuildConfig.ONLINE_MAPS) {
+                            TextButton(onClick = { showCamera = !showCamera }, enabled = !busy) {
+                                Text(if (showCamera) "收起相机参数" else "编辑各项相机参数")
+                            }
+                            if (showCamera) CameraFields(photo, camera, !busy) { camera = it }
+                        }
+                    }},confirmButton={TextButton(onClick={work("正在保存照片文字") {library.editPhoto(photo,title,note,date,parameters,camera.takeIf { BuildConfig.ONLINE_MAPS });editingPhoto=null;reload()}},enabled=!busy && (date.isBlank() || runCatching {LocalDate.parse(date)}.isSuccess)) {Text("保存")}},dismissButton={TextButton(onClick={editingPhoto=null},enabled=!busy) {Text("取消")}})
                 }
                 if(settings) SettingsSheet(dark)
-                if(mapOptions) ModalBottomSheet(onDismissRequest={mapOptions=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)) {
+                if(mapOptions) MapPanelSheet(onDismissRequest={mapOptions=false}) {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start=20.dp,end=20.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         Text("选择底图",style=MaterialTheme.typography.headlineSmall)
                         BasemapChoices()
-                        Text(if(BuildConfig.ONLINE_MAPS) "只联网加载当前地图区域；照片、EXIF 和作品全部保存在本机。已浏览地图自动缓存。卫星影像为 2016 年拼接图，约 10 米，并非实时画面。" else "切换不联网。请先在数据中一次性导入全国精细包：全国街道最高 Z15，1995 个建成区配有约 10 米卫星影像；城区索引之外的影像为概览。影像拍摄于 2016 年，不是实时画面。",style=MaterialTheme.typography.bodySmall)
+                        Text(if(BuildConfig.ONLINE_MAPS) {
+                            val overview = if (engine.hasOnlineOverview) "全球概览保存在本机。放大后按需加载并缓存细节。" else "按视野加载并缓存地图。"
+                            overview + "照片、EXIF 和作品保存在本机。卫星影像为 2016 年数据。"
+                        } else "切换不联网。请先在数据中一次性导入全国精细包：全国街道最高 Z15，1995 个建成区配有约 10 米卫星影像；城区索引之外的影像为概览。影像拍摄于 2016 年，不是实时画面。",style=MaterialTheme.typography.bodySmall)
                         if(mapInfo.isNotBlank()) Text(mapInfo,style=MaterialTheme.typography.bodySmall)
                         TextButton(onClick={mapOptions=false;settings=true}) {Text(if(BuildConfig.ONLINE_MAPS) "查看地图来源与缓存" else "查看地图数据与导入增强包")}
                         Button(onClick={mapOptions=false},modifier=Modifier.fillMaxWidth()) {Text("完成")}
@@ -274,6 +478,7 @@ class MainActivity : ComponentActivity() {
                 confirmation?.let { (text,action)->AlertDialog(onDismissRequest={confirmation=null},title={Text("请确认")},text={Text(text)},confirmButton={TextButton(onClick={confirmation=null;action()},enabled=!busy) {Text("确定")}},dismissButton={TextButton(onClick={confirmation=null}) {Text("取消")}}) }
             }
         }
+    }
     }
     fun chooseBasemap(mode:BasemapMode) {basemapMode=mode;engine.basemap(mode)}
     @OptIn(ExperimentalMaterial3Api::class)
@@ -292,23 +497,27 @@ class MainActivity : ComponentActivity() {
     }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable private fun SettingsSheet(dark: Boolean) {
-        ModalBottomSheet(onDismissRequest={if(!busy) settings=false},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true)) {
+        MapPanelSheet(onDismissRequest={if(!busy) settings=false}) {
             LazyColumn(Modifier.fillMaxWidth().padding(horizontal=20.dp),contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {Text("本地数据",style=MaterialTheme.typography.headlineSmall);Text("${places.size} 个地点 / ${places.sumOf {it.photoCount}} 张原图，全部保存在应用私有目录。卸载会清除作品，请先备份。")}
                 item {if(busy) {LinearProgressIndicator(Modifier.fillMaxWidth());Text(progress)};if(lastMessage.isNotBlank()) Text(lastMessage,style=MaterialTheme.typography.bodySmall)}
                 item {Button(onClick={launchSystemPicker {backup.launch("留影-${LocalDate.now()}.zip")}},enabled=!busy,modifier=Modifier.fillMaxWidth()) {Text("导出完整备份")}}
                 item {OutlinedButton(onClick={launchSystemPicker {restore.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,modifier=Modifier.fillMaxWidth()) {Text("从备份恢复")}}
                 item {HorizontalDivider();Text("外观",style=MaterialTheme.typography.titleMedium);Row {listOf("跟随系统","浅色","深色").forEachIndexed {index,label->TextButton(onClick={themeChoice=index;getSharedPreferences("settings",MODE_PRIVATE).edit().putInt("theme",index).apply()}) {Text((if(themeChoice==index) "✓ " else "")+label)}}}}
-                item {HorizontalDivider();Text(if(BuildConfig.ONLINE_MAPS) "地图与缓存" else "离线地图",style=MaterialTheme.typography.titleMedium);BasemapChoices();Text(mapStatus,style=MaterialTheme.typography.bodySmall);Text(if(BuildConfig.ONLINE_MAPS) "仅请求当前视野的地图瓦片，不上传照片、EXIF、地点记录或备份。地图服务可获知请求区域及 IP。已浏览区域自动缓存，缓存不代表完整离线地图。" else "APK 内置基础概览。一次导入全国精细包后，全国街道统一最高 Z15；当前地图中心进入覆盖区时自动使用。放大超过原始数据精度不会增加细节。",style=MaterialTheme.typography.bodySmall)}
+                item {HorizontalDivider();Text(if(BuildConfig.ONLINE_MAPS) "地图与缓存" else "离线地图",style=MaterialTheme.typography.titleMedium);BasemapChoices();Text(mapStatus,style=MaterialTheme.typography.bodySmall);Text(if(BuildConfig.ONLINE_MAPS) "地图服务可获知请求区域及 IP。地点搜索使用 Android 系统服务或 Photon，仅提交你输入的地名。照片、EXIF、地点记录和备份均保存在本机。已浏览区域自动缓存。" else "APK 内置基础概览。一次导入全国精细包后，全国街道统一最高 Z15；当前地图中心进入覆盖区时自动使用。放大超过原始数据精度不会增加细节。",style=MaterialTheme.typography.bodySmall)}
                 if(!BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={launchSystemPicker {importMap.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,modifier=Modifier.fillMaxWidth()) {Text("导入离线地图包（全国 / 地区）")}}
                 if(BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存（保留照片）")}}
                 item {TextButton(onClick={work("正在读取本地许可") {licenseText=withContext(Dispatchers.IO) {
-                    (if(BuildConfig.ONLINE_MAPS) "联网版使用 OpenFreeMap 街道与 EOX 2016 卫星底图，仅加载地图。" else "APK 内置全国概览与周边背景；全国 Z15 街道和城区精细影像通过全国离线包导入。")+"中国省界、岛屿和相关境界线单独保留。当前交互地图未取得正式审图通过证明，参考图的审图号不代表本应用审图通过。\n\n"+(if(BuildConfig.ONLINE_MAPS) listOf("ONLINE-LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt") else listOf("LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt","SATELLITE-LICENSE.txt","URBAN-LICENSE.txt")).joinToString("\n\n") {name->assets.open("maps/$name").bufferedReader().use {it.readText()}}
+                    val files = if(BuildConfig.ONLINE_MAPS) {
+                        val online = listOf("ONLINE-LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt")
+                        if (engine.hasOnlineOverview) online + listOf("overview/LICENSE.txt", "overview/SATELLITE-LICENSE.txt") else online
+                    } else listOf("LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt","SATELLITE-LICENSE.txt","URBAN-LICENSE.txt")
+                    (if(BuildConfig.ONLINE_MAPS) "联网版使用全球 OpenFreeMap 街道与 EOX 2016 卫星底图。" else "APK 内置全国概览与周边背景；全国 Z15 街道和城区精细影像通过全国离线包导入。")+"当前交互地图未取得正式审图通过证明，参考图的审图号不代表本应用审图通过。\n\n"+files.joinToString("\n\n") {name->assets.open("maps/$name").bufferedReader().use {it.readText()}}
                 }}},enabled=!busy) {Text("查看地图来源与许可（离线）")}}
                 items(maps,key={it.directory.name}) { map->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {Column(Modifier.weight(1f)) {Text(map.name);Text("Z${map.minZoom.toInt()}–${map.maxZoom.toInt()}",style=MaterialTheme.typography.bodySmall)};TextButton(onClick={confirmation="移除地区地图包？摄影记录不受影响。" to {work("正在移除地图包") {packages.remove(map);maps=withContext(Dispatchers.IO) {packages.list()};engine.reloadPackages()}}},enabled=!busy) {Text("移除")}}}
                 item {TextButton(onClick={launchSystemPicker {diagnosticExport.launch("PhotoMap-startup.txt")}}) {Text("导出启动故障报告")}}
                 item {Text(if(BuildConfig.ONLINE_MAPS) "本版不需要导入全国地图包，可与离线版同时安装。两版作品分别保存在各自私有目录，可通过完整备份 ZIP 互相迁移。" else "全国精细包同时包含全国 Z15 街道、建筑与景点，以及城区精细卫星影像。全部数据保存在本机；导入前自动检查可用空间并校验完整性，成功后可删除原 ZIP。景点和路名完整度仍受上游数据限制。",style=MaterialTheme.typography.bodySmall)}
-                item {Text("留影 0.3.0 · 无账号、无云同步、无广告。地图数据署名请见上方，数据来源与许可随 APK 保留。",style=MaterialTheme.typography.bodySmall)}
+                item {Text("留影 ${BuildConfig.VERSION_NAME} · 无账号、无云同步、无广告。地图数据署名请见上方，数据来源与许可随 APK 保留。",style=MaterialTheme.typography.bodySmall)}
             }
         }
     }

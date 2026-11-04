@@ -33,7 +33,7 @@ object MapAppearance {
                 if(layer.optString("type")=="background") result.put(JSONObject("""{"id":"background","type":"background","paint":{"background-color":"#19303d"}}"""))
                 continue
             }
-            val basicId=layer.optString("id").removePrefix("urban-")
+            val basicId=layer.optString("id").removePrefix("urban-").removePrefix("embedded-")
             if(mode==BasemapMode.SIMPLE && (basicId in listOf("poi-labels","buildings","landcover","landuse","railways","locality-labels"))) continue
             if(mode==BasemapMode.SIMPLE && basicId=="roads") continue
             if(mode==BasemapMode.SIMPLE && basicId=="road-labels") {

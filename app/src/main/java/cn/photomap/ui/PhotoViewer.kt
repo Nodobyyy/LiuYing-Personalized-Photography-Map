@@ -22,6 +22,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import cn.photomap.BuildConfig
 import cn.photomap.data.*
 import org.json.JSONObject
 
@@ -58,8 +59,9 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
                     if(info) {
                         Text(p.note.ifBlank {entry.record.note},color=Color.White,maxLines=5)
                         val meta=runCatching {JSONObject(p.exif)}.getOrDefault(JSONObject())
-                        val keys=listOf("camera_make" to "品牌","camera_model" to "相机","lens_model" to "镜头","focal_length" to "焦距","aperture" to "光圈","shutter_speed" to "快门","iso" to "ISO","gps_latitude" to "GPS纬度","gps_longitude" to "GPS经度")
-                        Text("${p.width} × ${p.height}" + (if(p.shotAt.isNotBlank()) " · ${p.shotAt}" else "") + keys.mapNotNull { (key,label)->meta.optString(key).takeIf {it.isNotBlank()}?.let {"$label $it"} }.joinToString(" · ",prefix="\n"),color=Color.LightGray,style=MaterialTheme.typography.bodySmall)
+                        val overrides = if (BuildConfig.ONLINE_MAPS) p.cameraOverrides() else emptyMap()
+                        val keys = cameraFields + listOf("gps_latitude" to "GPS纬度", "gps_longitude" to "GPS经度")
+                        Text("${p.width} × ${p.height}" + (if(p.shotAt.isNotBlank()) " · ${p.shotAt}" else "") + keys.mapNotNull { (key,label)->(overrides[key] ?: meta.optString(key)).takeIf {it.isNotBlank()}?.let {"$label $it"} }.joinToString(" · ",prefix="\n"),color=Color.LightGray,style=MaterialTheme.typography.bodySmall)
                         meta.optString("manual_parameters").takeIf {it.isNotBlank()}?.let {Text("参数补充 / 更正：$it",color=Color.LightGray,style=MaterialTheme.typography.bodySmall,maxLines=3)}
                         Row { TextButton(onClick={onEdit(p)}) {Text("编辑文字与参数")}; TextButton(onClick={onDelete(p)}) {Text("删除应用内副本")} }
                     }

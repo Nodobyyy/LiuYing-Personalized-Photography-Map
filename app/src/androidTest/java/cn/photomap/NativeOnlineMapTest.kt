@@ -31,6 +31,11 @@ class NativeOnlineMapTest {
             fun map(a:MainActivity):MapLibreMap? {val engine=MainActivity::class.java.getDeclaredField("engine").apply {isAccessible=true}.get(a) as PhotoMapEngine;return engine.javaClass.getDeclaredField("map").apply {isAccessible=true}.get(engine) as? MapLibreMap}
             fun waitFor(test:(MapLibreMap)->Boolean){var ready=false;repeat(600){if(!ready){scenario.onActivity {ready=map(it)?.let(test)==true};SystemClock.sleep(100)}};assertTrue("Online resources did not load",ready)}
             waitFor{it.style?.getSource("base")!=null}
+            scenario.onActivity { activity ->
+                val nativeMap = checkNotNull(map(activity))
+                assertEquals(2, nativeMap.prefetchZoomDelta)
+                assertTrue(nativeMap.tileCacheEnabled)
+            }
             scenario.onActivity {it.chooseBasemap(BasemapMode.STREETS);map(it)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.882,116.412),14.0))}
             waitFor{it.queryRenderedFeatures(RectF(0f,0f,1080f,1920f),"road-labels").isNotEmpty()}
             scenario.onActivity {a->val m=map(a)!!;assertTrue(m.queryRenderedFeatures(RectF(0f,0f,1080f,1920f),"water").all {it.geometry()?.type() in listOf("Polygon","MultiPolygon")});assertEquals(0,m.queryRenderedFeatures(m.projection.toScreenLocation(LatLng(39.882,116.412)),"water").size)}

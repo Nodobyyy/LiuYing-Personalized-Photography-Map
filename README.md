@@ -1,16 +1,18 @@
 # 留影 LiuYing
 
+<img src="app/src/online/res/drawable-nodpi/liuying_icon.jpg" alt="留影 App 图标" width="144" height="144">
+
 留影是 Android 本地摄影地图应用。可在地图上选点，从系统相册导入多张照片，记录拍摄日期、标题和心得，并按地点浏览、编辑及备份作品。项目使用 Kotlin、Compose、MapLibre Native 和 SQLite，支持 Android 8.0 及以上和 OpenGL ES 3.0。
 
 ## 维护状态
 
 **离线版暂时停止维护，后续更新集中在 Online（联网版）。** 现有离线版仍可使用，也可通过「数据」导出备份，在 Online 版恢复作品。两版可以并装。
 
-Online 版（`cn.photomap.online`）支持切换简洁底图、街道图和卫星图。它通过 OpenFreeMap 加载道路与景点，通过 EOX 加载卫星影像。联网请求仅用于地图资源，地图服务商会收到瓦片请求和连接信息。照片、EXIF、作品、备注及备份保留在本机。
+Online 版（`cn.photomap.online`）支持简洁底图、全球街道图和卫星图。缩至最小可拖动完整地球，放大时按需通过 OpenFreeMap 加载道路与景点，并通过 EOX 加载卫星影像。手动选点时可搜索地名（优先使用 Android 系统服务，必要时使用 Photon），也可直接输入经纬度。地图服务商会收到瓦片请求和连接信息，地点搜索服务会收到用户主动提交的地名。照片、EXIF、作品、备注及备份保留在本机。
 
 ## 下载与使用
 
-在 GitHub Releases 下载 Online 调试版。安装后，点地图上的「＋」选择拍摄地点，再从系统相册导入照片。点照片标记可查看该地点的作品，点「底图」可切换地图样式，点「数据」可导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
+在 GitHub Releases 下载 Online 调试版。点「导入照片」可批量读取拍摄日期和 GPS，缺少信息时可补填。点「地图选点」也可先确定位置再添加照片。点照片标记查看作品，点「底图」切换地图样式，点「数据」导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
 
 ## 当前局限与后续方向
 
@@ -18,9 +20,7 @@ Online 版（`cn.photomap.online`）支持切换简洁底图、街道图和卫�
 | --- | --- |
 | 界面视觉和布局仍需打磨，地图控件与信息面板的排布还有优化空间。 | 统一视觉样式，调整控件层级和布局，优化地图浏览、选点及照片整理的交互。 |
 | 卫星底图使用 2016 年 Sentinel-2 影像，部分区域与现状有差异。 | 评估更新的卫星影像来源及其覆盖范围。 |
-| 当前支持在中国地区选点和记录作品。 | 评估扩展至全球的可行性，包括底图覆盖、地名与选点范围。 |
-
-后续也会继续完善作品管理和地图功能，全球覆盖仍处于评估阶段。
+| 全球街道与景点的详细程度受上游数据覆盖影响。 | 持续优化地图加载与地点搜索。 |
 
 ## 历史离线版
 
@@ -32,12 +32,16 @@ Online 版（`cn.photomap.online`）支持切换简洁底图、街道图和卫�
 
 需要 JDK 17、Android SDK Platform 35 / Build Tools 35.0.0、Node.js 24（数据工具）。Windows 使用 Gradle Wrapper 8.9。
 
+从 [MapLibre Native 的 globe 预发行版](https://github.com/maplibre/maplibre-native/releases/tag/android-v2026.10.19-globe) 下载 `MapLibreAndroid-opengl-release-android-v2026.10.19-globe.aar`，放入 `.tooling/maplibre-globe/`。SHA-256 为 `a05fedd9eb1eddf90792f0938bf573c79f15b8dd24d1a5ecd1289916d89e3531`。
+
 ```powershell
 ./gradlew.bat :core:test :app:testOnlineDebugUnitTest :app:assembleOnlineDebug :app:lintOnlineDebug
 node --test tools/map-bundle.test.mjs
 ```
 
 Online APK 输出位于 `app/build/outputs/apk/online/debug`。需使用阿里云 Maven 镜像时加 `-PuseMirror=true`。原生测试使用 `assembleOnlineDebugAndroidTest`，测试源码在 `app/src/androidTest`，应在专用模拟器或测试机运行。
+
+要构建带内置概览的 Online APK，先准备下方所列三份 PMTiles，再运行 `node tools/fetch-world-satellite.mjs .tooling/world-satellite.pmtiles <pmtiles 可执行文件路径>` 和 `node tools/stage-online-overview.mjs app/src/offline/assets/maps <pmtiles 可执行文件路径>`。此步骤校验并打包全球 Z6 矢量概览、全球 Z2 卫星概览、中国 Z10 街道和中国 Z7 卫星概览。未准备内置资源时，源码仍可构建按需联网的开发包。
 
 <details>
 <summary>历史离线版构建步骤</summary>

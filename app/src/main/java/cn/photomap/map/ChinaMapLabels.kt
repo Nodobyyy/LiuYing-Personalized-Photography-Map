@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 /** Apply to the built-in style and imported styles, independently of upstream classifications. */
 object ChinaMapLabels {
-    fun apply(style: JSONObject,china: ChinaView) {
+    fun apply(style: JSONObject,china: ChinaView, global: Boolean = false) {
         val taiwan = JSONArray("""["any",["in",["get","name"],["literal",["Taiwan","台湾","臺灣","台灣","台湾省","臺灣省"]]],["in",["get","name:en"],["literal",["Taiwan","Republic of China"]]],["in",["get","name:zh-Hans"],["literal",["台湾","台湾省"]]],["in",["get","name:zh-Hant"],["literal",["臺灣","台灣","臺灣省"]]],["all",["any",["==",["get","kind"],"country"],["==",["get","class"],"country"]],["any",["in",["get","country_code"],["literal",["TW","HK","MO"]]],["in",["get","iso_a2"],["literal",["TW","HK","MO"]]]]]]""")
         val layers=style.getJSONArray("layers")
         for(i in 0 until layers.length()) {
@@ -16,18 +16,29 @@ object ChinaMapLabels {
                 val combined=JSONArray().put("all")
                 if(filter!=null) combined.put(filter)
                 combined.put(JSONArray().put("!").put(taiwan))
-                if(layer.optJSONObject("layout")?.optString("symbol-placement")!="line" && layer.optString("id")!="context-country-labels") combined.put(JSONArray().put("within").put(china.data.getJSONObject("labelOutline")))
+                if(!global && layer.optJSONObject("layout")?.optString("symbol-placement")!="line" && layer.optString("id")!="context-country-labels") combined.put(JSONArray().put("within").put(china.data.getJSONObject("labelOutline")))
                 layer.put("filter",combined)
             }
         }
         style.getJSONObject("sources").put("china-province-label",JSONObject().put("type","geojson").put("data",china.data.getJSONObject("provinces")))
+        val province=JSONObject("""{"id":"region-labels","type":"symbol","source":"china-province-label","minzoom":3.25,"maxzoom":8,"filter":["!=",["get","name"],"台湾省"],"layout":{"text-field":["get","name"],"text-font":["Noto Sans Regular"],"text-size":13,"text-padding":4},"paint":{"text-color":"#566156","text-halo-color":"#f4f2ec","text-halo-width":1.3}}""")
+        val taiwanProvince=JSONObject(province.toString()).put("id","china-taiwan-province").put("filter",JSONArray("""["==",["get","name"],"台湾省"]"""))
+        if (global) {
+            val globalLayers = JSONArray()
+            for (i in 0 until layers.length()) {
+                val layer = layers.getJSONObject(i)
+                if (layer.optString("source-layer") !in listOf("boundary", "boundaries") && layer.optString("id") != "region-labels") {
+                    globalLayers.put(layer)
+                }
+            }
+            style.put("layers", globalLayers.put(province).put(taiwanProvince))
+            return
+        }
         style.getJSONObject("sources").put("china-display-mask",JSONObject().put("type","geojson").put("data",JSONObject().put("type","Feature").put("properties",JSONObject()).put("geometry",china.data.getJSONObject("outside"))))
         style.getJSONObject("sources").put("china-reference-outline",JSONObject().put("type","geojson").put("data",JSONObject().put("type","Feature").put("properties",JSONObject()).put("geometry",china.data.getJSONObject("outline"))))
         style.getJSONObject("sources").put("china-reference-provinces",JSONObject().put("type","geojson").put("data",china.data.getJSONObject("provinceBoundaries")))
         style.getJSONObject("sources").put("china-reference-lines",JSONObject().put("type","geojson").put("data",china.data.getJSONObject("boundaryLines")))
         style.getJSONObject("sources").put("china-sea-label",JSONObject("""{"type":"geojson","data":{"type":"Feature","properties":{},"geometry":{"type":"Point","coordinates":[114.5,12.5]}}}"""))
-        val province=JSONObject("""{"id":"region-labels","type":"symbol","source":"china-province-label","minzoom":3.25,"maxzoom":8,"filter":["!=",["get","name"],"台湾省"],"layout":{"text-field":["get","name"],"text-font":["Noto Sans Regular"],"text-size":13,"text-padding":4},"paint":{"text-color":"#566156","text-halo-color":"#f4f2ec","text-halo-width":1.3}}""")
-        val taiwanProvince=JSONObject(province.toString()).put("id","china-taiwan-province").put("filter",JSONArray("""["==",["get","name"],"台湾省"]"""))
         // Line labels render before the mask; point labels use the cheap point-in-polygon filter.
         val reordered=JSONArray()
         for(i in 0 until layers.length()) if(layers.getJSONObject(i).optString("type")!="symbol") reordered.put(layers.getJSONObject(i))

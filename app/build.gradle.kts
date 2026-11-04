@@ -18,7 +18,14 @@ android {
     flavorDimensions += "mapMode"
     productFlavors {
         create("offline") {dimension="mapMode";buildConfigField("boolean","ONLINE_MAPS","false");manifestPlaceholders["appLabel"]="留影·离线"}
-        create("online") {dimension="mapMode";applicationIdSuffix=".online";buildConfigField("boolean","ONLINE_MAPS","true");manifestPlaceholders["appLabel"]="留影·联网"}
+        create("online") {
+            dimension = "mapMode"
+            applicationIdSuffix = ".online"
+            versionCode = 8
+            versionName = "0.5.0"
+            buildConfigField("boolean", "ONLINE_MAPS", "true")
+            manifestPlaceholders["appLabel"] = "留影·联网"
+        }
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
@@ -40,7 +47,15 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("org.maplibre.gl:android-sdk:11.8.0")
+    "offlineImplementation"("org.maplibre.gl:android-sdk:11.8.0")
+    "onlineImplementation"(files(rootProject.file(".tooling/maplibre-globe/MapLibreAndroid-opengl-release-android-v2026.10.19-globe.aar")))
+    "onlineImplementation"("org.maplibre.gl:android-sdk-geojson:6.0.1")
+    "onlineImplementation"("org.maplibre.gl:android-sdk-turf:6.0.1")
+    "onlineImplementation"("org.maplibre.gl:maplibre-android-gestures:0.0.4")
+    "onlineImplementation"("androidx.fragment:fragment:1.8.9")
+    "onlineImplementation"("androidx.interpolator:interpolator:1.0.0")
+    "onlineImplementation"("com.jakewharton.timber:timber:5.0.1")
+    "onlineImplementation"("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
     implementation("io.coil-kt:coil-compose:2.7.0")

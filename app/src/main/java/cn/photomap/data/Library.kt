@@ -28,6 +28,7 @@ data class Photo(val id: String, val recordId: String, val original: String, val
 data class Imported(val photos: List<Photo>, val failed: Int, val duplicates: Int)
 
 class Library(private val context: Context) {
+    private val latitudeLimit = if (cn.photomap.BuildConfig.ONLINE_MAPS) 90.0 else 85.0
     private val lock = Mutex()
     private val root = File(context.filesDir, "library")
     private val old = File(context.filesDir, "library-previous")
@@ -87,6 +88,26 @@ class Library(private val context: Context) {
         db.rawQuery("SELECT id,title,note,shot_date FROM records WHERE location_id=? ORDER BY shot_date DESC,created_at DESC",arrayOf(location)).use { c -> while(c.moveToNext()) result.add(Record(c.getString(0),location,c.getString(1),c.getString(2),c.getString(3),photos(db,c.getString(0)))) }
         result
     }
+    suspend fun photoDays(): List<PhotoDay> = io {
+        val days = sortedMapOf<LocalDate, MutableList<DatedPhoto>>(reverseOrder())
+        val sql = """SELECT p.*, r.location_id, r.title AS record_title, r.note AS record_note,
+            r.shot_date AS record_date, l.name AS place_name
+            FROM photos p JOIN records r ON p.record_id=r.id JOIN locations l ON r.location_id=l.id
+            ORDER BY p.shot_at, p.created_at, p.sort_order, p.id"""
+        helper.readableDatabase.rawQuery(sql, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val photo = photo(cursor)
+                val record = Record(photo.recordId, cursor.getString(cursor.getColumnIndexOrThrow("location_id")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("record_title")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("record_note")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("record_date")), emptyList())
+                val date = runCatching { LocalDate.parse(photo.date.ifBlank { record.date }) }.getOrNull() ?: continue
+                val placeName = cursor.getString(cursor.getColumnIndexOrThrow("place_name"))
+                days.getOrPut(date) { mutableListOf() }.add(DatedPhoto(photo, record, placeName))
+            }
+        }
+        days.map { (date, photos) -> PhotoDay(date, photos) }
+    }
     suspend fun cleanupAbandonedFiles() = io {
         if(cleaned) return@io
         val used = photos(helper.readableDatabase).flatMap { listOf(it.original,it.thumbnail) }.toSet()
@@ -104,7 +125,7 @@ class Library(private val context: Context) {
             val original = "originals/$id.photo"; val thumbnail = "thumbnails/$id.jpg"
             val originalFile = file(original); originalFile.parentFile!!.mkdirs()
             try {
-                var name = "photo"
+                var name = if (cn.photomap.BuildConfig.ONLINE_MAPS && uri.scheme == "file") uri.lastPathSegment ?: "photo" else "photo"
                 context.contentResolver.query(uri,arrayOf(OpenableColumns.DISPLAY_NAME),null,null,null)?.use { if(it.moveToFirst()) name=it.getString(0) ?: name }
                 var size = 0L
                 context.contentResolver.openInputStream(uri)!!.use { input -> originalFile.outputStream().use { output ->
@@ -143,8 +164,62 @@ class Library(private val context: Context) {
         if(small!==oriented) small.recycle(); if(oriented!==bitmap) oriented.recycle(); bitmap.recycle()
     }
     suspend fun discard(items: List<Photo>) = io { val saved=photos(helper.readableDatabase).map { it.id }.toSet(); items.filter { it.id !in saved }.forEach { file(it.original).delete(); file(it.thumbnail).delete() } }
+    suspend fun saveLocatedPhotos(photos: List<PhotoPlacement>) = io {
+        if (photos.isEmpty()) return@io
+        require(photos.map { it.photo.id }.distinct().size == photos.size)
+        photos.forEach { (photo, point) ->
+            require(point.inCoverage && file(photo.original).isFile && file(photo.thumbnail).isFile)
+            LocalDate.parse(photo.date)
+        }
+        val db = helper.writableDatabase
+        val now = System.currentTimeMillis()
+        db.beginTransaction()
+        try {
+            val records = linkedMapOf<Pair<String, String>, MutableList<Photo>>()
+            for ((photo, point) in photos) {
+                // Only consider a small coordinate window, then compare actual distances in metres.
+                val location = db.rawQuery("""SELECT id, latitude, longitude FROM locations
+                    WHERE latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?""",
+                    arrayOf((point.latitude - .0004).toString(), (point.latitude + .0004).toString(),
+                        (point.longitude - .0005).toString(), (point.longitude + .0005).toString())).use { cursor ->
+                    val metres = FloatArray(1)
+                    var nearest = 30f
+                    var match: String? = null
+                    while (cursor.moveToNext()) {
+                        android.location.Location.distanceBetween(point.latitude, point.longitude,
+                            cursor.getDouble(1), cursor.getDouble(2), metres)
+                        if (metres[0] < nearest) { nearest = metres[0]; match = cursor.getString(0) }
+                    }
+                    match
+                } ?: UUID.randomUUID().toString().also { id ->
+                    val name = "拍摄地点 %.4f, %.4f".format(java.util.Locale.ROOT, point.latitude, point.longitude)
+                    db.insertOrThrow("locations", null, values("id" to id, "name" to name, "latitude" to point.latitude,
+                        "longitude" to point.longitude, "created_at" to now, "updated_at" to now))
+                }
+                records.getOrPut(location to photo.date) { mutableListOf() }.add(photo)
+            }
+            records.forEach { (key, group) ->
+                val (location, date) = key
+                val record = UUID.randomUUID().toString()
+                db.insertOrThrow("records", null, values("id" to record, "location_id" to location, "title" to "照片导入",
+                    "note" to "", "shot_date" to date, "created_at" to now, "updated_at" to now))
+                insertPhotos(db, group, record, 0, now)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+    private fun insertPhotos(db: SQLiteDatabase, added: List<Photo>, record: String, offset: Int, now: Long) {
+        added.forEachIndexed { index, p ->
+            db.insertOrThrow("photos", null, values("id" to p.id, "record_id" to record, "original_path" to p.original,
+                "thumbnail_path" to p.thumbnail, "original_filename" to p.filename, "width" to p.width, "height" to p.height,
+                "shot_at" to p.shotAt, "exif_json" to p.exif, "hash" to p.hash, "title" to p.title, "note" to p.note,
+                "shot_date" to p.date, "sort_order" to offset + index, "created_at" to now))
+        }
+    }
     suspend fun save(placeId: String?, name: String, latitude: Double, longitude: Double, recordId: String?, title: String, note: String, date: String, added: List<Photo>): String = io {
-        require(latitude in -85.0..85.0 && longitude in -180.0..180.0); LocalDate.parse(date)
+        require(latitude in -latitudeLimit..latitudeLimit && longitude in -180.0..180.0); LocalDate.parse(date)
         require(name.length<=200 && title.length<=500 && note.length<=100000)
         val db=helper.writableDatabase; val location=placeId ?: UUID.randomUUID().toString(); val record=recordId ?: UUID.randomUUID().toString(); val now=System.currentTimeMillis()
         val existing=if(recordId==null) emptyList() else photos(db,recordId)
@@ -158,16 +233,22 @@ class Library(private val context: Context) {
             val recordValues=values("title" to title,"note" to note,"shot_date" to date,"updated_at" to now)
             if(recordId==null) { recordValues.put("id",record); recordValues.put("location_id",location); recordValues.put("created_at",now); db.insertOrThrow("records",null,recordValues) }
             else check(db.update("records",recordValues,"id=? AND location_id=?",arrayOf(record,location))==1)
-            added.forEachIndexed { index,p -> db.insertOrThrow("photos",null,values("id" to p.id,"record_id" to record,"original_path" to p.original,"thumbnail_path" to p.thumbnail,"original_filename" to p.filename,"width" to p.width,"height" to p.height,"shot_at" to p.shotAt,"exif_json" to p.exif,"hash" to p.hash,"title" to p.title,"note" to p.note,"shot_date" to p.date,"sort_order" to existing.size+index,"created_at" to now)) }
+            insertPhotos(db, added, record, existing.size, now)
             db.setTransactionSuccessful()
         } finally { db.endTransaction() }
         location
     }
-    suspend fun editPhoto(p: Photo, title: String, note: String, date: String, manualParameters: String?=null) = io {
+    suspend fun editPhoto(p: Photo, title: String, note: String, date: String, manualParameters: String?=null,
+                          cameraOverrides: Map<String, String>? = null) = io {
         if(date.isNotBlank()) LocalDate.parse(date)
         require(title.length<=500 && note.length<=100000 && (manualParameters?.length ?: 0)<=2500)
         val content=values("title" to title,"note" to note,"shot_date" to date)
-        if(manualParameters!=null) content.put("exif_json",JSONObject(p.exif).put("manual_parameters",manualParameters).toString())
+        if (manualParameters != null || cameraOverrides != null) {
+            val metadata = JSONObject(p.exif)
+            if (manualParameters != null) metadata.put("manual_parameters", manualParameters)
+            if (cameraOverrides != null) metadata.withCameraOverrides(cameraOverrides)
+            content.put("exif_json", metadata.toString())
+        }
         helper.writableDatabase.update("photos",content,"id=?",arrayOf(p.id))
     }
     suspend fun removePhoto(id: String) = io {
@@ -225,7 +306,7 @@ class Library(private val context: Context) {
                 require(imported.map { it.id }.distinct().size==imported.size)
                 val expected=imported.map { it.original }.toSet()+"photomap.db"
                 require(names.toSet()==expected)
-                staged.rawQuery("SELECT latitude,longitude,coordinate_system FROM locations",null).use { c->while(c.moveToNext()) require(c.getDouble(0) in -85.0..85.0 && c.getDouble(1) in -180.0..180.0 && c.getString(2)=="WGS84") }
+                staged.rawQuery("SELECT latitude,longitude,coordinate_system FROM locations",null).use { c->while(c.moveToNext()) require(c.getDouble(0) in -latitudeLimit..latitudeLimit && c.getDouble(1) in -180.0..180.0 && c.getString(2)=="WGS84") }
                 imported.forEach { p->
                     require(p.exif.length<=32768);JSONObject(p.exif)
                     if(p.date.isNotBlank()) LocalDate.parse(p.date)

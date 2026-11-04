@@ -27,6 +27,7 @@ import org.maplibre.android.style.sources.GeoJsonSource
 import org.maplibre.geojson.*
 import java.security.MessageDigest
 import kotlin.math.abs
+import kotlin.math.log2
 
 class PhotoMapEngine(private val context: Context, private val scope: CoroutineScope, private val library: Library,
     private val packages: MapPackages, private val onSelect: (List<Place>) -> Unit, private val onStatus: (String) -> Unit,
@@ -38,6 +39,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private var satellite: JSONObject?=null
     private var activeSatellite: JSONObject?=null
     private var fineSatelliteLoaded=false
+    var hasOnlineOverview = false
+        private set
     private var contextStyle: JSONObject?=null
     private val appearancePrefs=context.getSharedPreferences("settings",Context.MODE_PRIVATE)
     var basemapMode=runCatching {BasemapMode.valueOf(appearancePrefs.getString("basemap","STREETS")!!)}.getOrDefault(BasemapMode.STREETS);private set
@@ -58,32 +61,38 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private var revision=0
     private var fitFirstView=false
     var suggestedName="";private set
-    val canPick get()=MapViewport.inCoverage(center.latitude,center.longitude)
+    private fun inCoverage(latitude: Double, longitude: Double) =
+        cn.photomap.data.PhotoPoint(latitude, longitude).inCoverage
+    val canPick get()=inCoverage(center.latitude,center.longitude)
     var picking=false
         set(value) {
             field=value
             style?.getLayer("user-photo-covers")?.setProperties(visibility(if(value) Property.NONE else Property.VISIBLE))
             if(value) refreshPickHint() else refresh()
         }
-    val center: LatLng get()=map?.cameraPosition?.target ?: LatLng(35.0,105.0)
-    init { MapLibre.getInstance(context);if(BuildConfig.ONLINE_MAPS) MapNetwork.configure(context); view=MapView(context,MapLibreMapOptions.createFromAttributes(context).localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif"));view.setBackgroundColor(Color.rgb(233,236,231)) }
+    val center: LatLng get()=(map?.cameraPosition?.target ?: LatLng(35.0,105.0)).let { if (BuildConfig.ONLINE_MAPS) it.wrap() else it }
+    init { MapLibre.getInstance(context);if(BuildConfig.ONLINE_MAPS) MapNetwork.configure(); view=MapView(context,MapLibreMapOptions.createFromAttributes(context).localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif"));view.setBackgroundColor(Color.rgb(233,236,231)) }
     fun create(saved: android.os.Bundle?) {
         if(BuildConfig.ONLINE_MAPS) MapNetwork.configureCache(context)
         view.onCreate(saved)
         view.getMapAsync { ready ->
             map=ready
-            ready.uiSettings.isRotateGesturesEnabled=false; ready.uiSettings.isTiltGesturesEnabled=false
+            ready.uiSettings.isRotateGesturesEnabled=BuildConfig.ONLINE_MAPS; ready.uiSettings.isTiltGesturesEnabled=false
             ready.uiSettings.isScrollGesturesEnabled=true;ready.uiSettings.isZoomGesturesEnabled=true;ready.uiSettings.isDoubleTapGesturesEnabled=true
             ready.uiSettings.isLogoEnabled=false;ready.uiSettings.isAttributionEnabled=false
             ready.setMaxZoomPreference(17.0)
+            if (BuildConfig.ONLINE_MAPS) {
+                ready.setTileCacheEnabled(true)
+                ready.setPrefetchZoomDelta(2)
+            }
             // Native gesture constraint is applied while panning. Never move the
             // camera from idle callbacks: that caused a visible jump after release.
-            ready.setLatLngBoundsForCameraTarget(LatLngBounds.from(60.0,144.0,-2.0,66.0))
+            if (!BuildConfig.ONLINE_MAPS) ready.setLatLngBoundsForCameraTarget(LatLngBounds.from(60.0,144.0,-2.0,66.0))
             val prefs=context.getSharedPreferences("map-camera",Context.MODE_PRIVATE)
             fitFirstView=!prefs.contains("zoom")
             ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).build()
             ready.addOnCameraIdleListener {
-                ready.cameraPosition.let { c->c.target?.let { p->prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
+                ready.cameraPosition.let { c->c.target?.let { raw->val p=if(BuildConfig.ONLINE_MAPS) raw.wrap() else raw; prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
                 chooseMap(); refresh();refreshPickHint();refreshMapInfo()
             }
             ready.addOnMapClickListener { coordinate ->
@@ -103,15 +112,32 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 }
             }
             scope.launch {
-                val result=withContext(Dispatchers.IO) { runCatching { if(BuildConfig.ONLINE_MAPS) OnlineMapAssets.load(context) else LocalMapBundle.load(context) } }
-                base=result.getOrNull(); regional=if(BuildConfig.ONLINE_MAPS)emptyList() else withContext(Dispatchers.IO) { packages.list() }
-                satellite=if(BuildConfig.ONLINE_MAPS) JSONObject(context.assets.open("maps/satellite-online.json").bufferedReader().use {it.readText()}) else base?.directory?.let {dir->withContext(Dispatchers.IO) {runCatching {JSONObject(LocalMapBundle.loadDirectory(dir,verifyFiles=false,styleName="style-satellite.json").style)}.getOrNull()}}
+                if (BuildConfig.ONLINE_MAPS) {
+                    val result = withContext(Dispatchers.IO) { runCatching { OnlineMapAssets.load(context) } }
+                    val loaded = result.getOrNull()
+                    base = loaded?.streets
+                    satellite = loaded?.satellite
+                    hasOnlineOverview = loaded?.hasOverview == true
+                    activeSatellite = satellite
+                    if (result.isFailure) onStatus("底图校验失败，请检查应用资源")
+                    applyStyle(base, "online")
+                    return@launch
+                }
+                val result=withContext(Dispatchers.IO) { runCatching { LocalMapBundle.load(context) } }
+                base=result.getOrNull(); regional=withContext(Dispatchers.IO) { packages.list() }
+                satellite=base?.directory?.let {dir->withContext(Dispatchers.IO) {runCatching {JSONObject(LocalMapBundle.loadDirectory(dir,verifyFiles=false,styleName="style-satellite.json").style)}.getOrNull()}}
                 activeSatellite=satellite
-                contextStyle=if(BuildConfig.ONLINE_MAPS)null else base?.directory?.let {dir->withContext(Dispatchers.IO) {runCatching {JSONObject(LocalMapBundle.loadDirectory(dir,verifyFiles=false,styleName="style-context.json").style)}.getOrNull()}}
+                contextStyle=base?.directory?.let {dir->withContext(Dispatchers.IO) {runCatching {JSONObject(LocalMapBundle.loadDirectory(dir,verifyFiles=false,styleName="style-context.json").style)}.getOrNull()}}
                 if(result.isFailure) onStatus("底图校验失败，请检查应用资源")
-                applyStyle(base, if(BuildConfig.ONLINE_MAPS) "online" else "base")
+                applyStyle(base, "base")
             }
-            view.post {updateViewportLimits()}
+            view.post {
+                updateViewportLimits()
+                if (BuildConfig.ONLINE_MAPS && fitFirstView) {
+                    fitFirstView = false
+                    ready.moveCamera(overviewCamera())
+                }
+            }
         }
         view.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->updateViewportLimits()}
     }
@@ -121,8 +147,26 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     fun theme(isDark: Boolean) { if(dark!=isDark) { dark=isDark; selectedMap=""; chooseMap(force=true) } }
     fun reloadPackages() { scope.launch { regional=withContext(Dispatchers.IO) { packages.list() };loadedPackages.clear(); selectedMap=""; chooseMap(true) } }
     private fun nationalCamera()=CameraUpdateFactory.newLatLngBounds(LatLngBounds.Builder().include(LatLng(54.0,136.0)).include(LatLng(3.0,73.0)).build(),36)
-    fun national() { map?.animateCamera(nationalCamera()) }
+    fun national() { map?.animateCamera(overviewCamera()) }
+    private fun globeMinimum(): Double {
+        val width = minOf(view.width, view.height) / context.resources.displayMetrics.density
+        return log2((width * .79 * Math.PI / 512).coerceAtLeast(1.0))
+    }
+    private fun overviewCamera() = if (BuildConfig.ONLINE_MAPS) {
+        CameraUpdateFactory.newCameraPosition(CameraPosition.Builder()
+            .target(LatLng(22.0, 104.0)).zoom(globeMinimum()).bearing(0.0).tilt(0.0).build())
+    } else nationalCamera()
+    private val occlusionMethod by lazy {
+        if (BuildConfig.ONLINE_MAPS) Projection::class.java.getMethod("isLocationOccluded", LatLng::class.java) else null
+    }
     fun connectivityChanged() {refreshMapInfo()}
+    fun snapshot(onReady: (android.graphics.Bitmap) -> Unit) {
+        map?.snapshot { bitmap -> onReady(bitmap) }
+    }
+    fun focusSearch(latitude: Double, longitude: Double) {
+        map?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), 15.0))
+        refreshPickHint()
+    }
     fun focus(latitude: Double, longitude: Double) { map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude,longitude),maxOf(10.0,map?.cameraPosition?.zoom ?: 10.0))) }
     private fun chooseMap(force: Boolean=false) {
         val ready=map ?: return; if(applying) return
@@ -158,7 +202,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val ready=map ?: return
         job?.cancel(); style=null; icons=emptySet(); selectedMap=key; applying=true
         val json=JSONObject(bundle?.style ?: """{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#e9ece7"}}]}""")
-        if(bundle!=null) {MapAppearance.apply(json,basemapMode,activeSatellite,contextStyle);ChinaMapLabels.apply(json,china)}
+        if(bundle!=null) {MapAppearance.apply(json,basemapMode,activeSatellite,contextStyle);ChinaMapLabels.apply(json,china,global=BuildConfig.ONLINE_MAPS)}
         if(dark) {
             val layers=json.getJSONArray("layers")
             for(i in 0 until layers.length()) {
@@ -187,7 +231,9 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 val layer=layers.getJSONObject(i);val paint=layer.optJSONObject("paint") ?: continue
                 if(layer.optString("id")=="china-display-mask") paint.put("fill-color","#19303d")
                 if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.0)
-                if(!satelliteLabels && (layer.optString("type")=="symbol" || layer.optString("source")=="base")) layer.put("layout",(layer.optJSONObject("layout")?:JSONObject()).put("visibility","none"))
+                val source = layer.optString("source")
+                val vectorSource = source == "base" || (BuildConfig.ONLINE_MAPS && (source == "overview" || source == "context"))
+                if(!satelliteLabels && (layer.optString("type")=="symbol" || vectorSource)) layer.put("layout",(layer.optJSONObject("layout")?:JSONObject()).put("visibility","none"))
                 if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
             }
         }
@@ -200,15 +246,37 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 iconSize(interpolate(linear(),zoom(),stop(3,28f/128*density),stop(8,32f/128*density),stop(13,40f/128*density),stop(16,48f/128*density)))))
             val maxZoom=json.optJSONObject("sources")?.let { sources->sources.keys().asSequence().map {sources.getJSONObject(it)}.filter {it.optString("type")=="vector"}.map {it.optDouble("maxzoom",12.0)}.maxOrNull() } ?: 0.0
             (context.applicationContext as? PhotoMapApplication)?.startupDiagnostics?.mapReady()
-            onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) "OpenFreeMap 在线街道 · EOX 2016 卫星 · 地图缓存上限 128 MiB · 照片与作品全部本地保存" else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
-            if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(nationalCamera())}}
+            onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
+                val overview = if (hasOnlineOverview) "内置中国街道 Z10 和卫星 Z7 · " else ""
+                "${overview}OpenFreeMap 在线街道 · EOX 2016 卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
+            } else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
+            if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(overviewCamera())}}
             refresh();refreshPickHint();refreshMapInfo();chooseMap()
         }
     }
     private fun refresh() {
         val ready=map ?: return; val currentStyle=style ?: return
-        job?.cancel(); val snapshotItems=items.associateBy { it.id }
-        val points=items.filter {MapViewport.inCoverage(it.latitude,it.longitude)}.map { p->ready.projection.toScreenLocation(LatLng(p.latitude,p.longitude)).let { PhotoPoint(p.id,it.x.toDouble(),it.y.toDouble(),p.photoCount) } }
+        job?.cancel()
+        val candidates = if (BuildConfig.ONLINE_MAPS && ready.cameraPosition.zoom >= 6 && items.isNotEmpty() && view.width > 0 && view.height > 0) {
+            val bounds = ready.projection.visibleRegion.latLngBounds
+            // Include a margin so photos just outside the screen still cluster with edge markers.
+            val longitudePad = (bounds.longitudeEast - bounds.longitudeWest) / 2
+            val latitudePad = (bounds.latitudeNorth - bounds.latitudeSouth) / 2
+            val latitudes = (bounds.latitudeSouth - latitudePad)..(bounds.latitudeNorth + latitudePad)
+            val west = bounds.longitudeWest - longitudePad
+            val east = bounds.longitudeEast + longitudePad
+            items.filter { it.latitude in latitudes &&
+                (it.longitude in west..east || it.longitude + 360 in west..east || it.longitude - 360 in west..east) }
+        } else items
+        val snapshotItems = candidates.associateBy { it.id }
+        val points = candidates.mapNotNull { place ->
+            if (!inCoverage(place.latitude, place.longitude)) return@mapNotNull null
+            val coordinate = LatLng(place.latitude, place.longitude)
+            if (BuildConfig.ONLINE_MAPS && ready.cameraPosition.zoom < 6 &&
+                occlusionMethod?.invoke(ready.projection, coordinate) == true) return@mapNotNull null
+            val point = ready.projection.toScreenLocation(coordinate)
+            PhotoPoint(place.id, point.x.toDouble(), point.y.toDouble(), place.photoCount)
+        }
         val density=context.resources.displayMetrics.density
         val clusterRadius=MapViewport.clusterRadiusDp(ready.cameraPosition.zoom)*density
         val markerDp=kotlin.math.round(MapViewport.markerDp(ready.cameraPosition.zoom)).toFloat()
@@ -238,15 +306,17 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val ready=map ?: return
         if(view.width==0 || view.height==0) return
         val density=context.resources.displayMetrics.density.toDouble();val width=view.width/density;val height=view.height/density
-        val minimum=MapViewport.minimumZoom(width,height);ready.setMinZoomPreference(minimum)
+        val minimum=if(BuildConfig.ONLINE_MAPS) globeMinimum() else MapViewport.minimumZoom(width,height)
+        ready.setMinZoomPreference(minimum)
     }
     private fun refreshPickHint() {
         if(!picking) return
         val ready=map ?: return;val target=center
-        val allowed=MapViewport.inCoverage(target.latitude,target.longitude)
+        val allowed=inCoverage(target.latitude,target.longitude)
         if(!allowed) {suggestedName="";onPickContext("当前位置超出地图数据范围",false);return}
         val anchor=ready.projection.toScreenLocation(target);val radius=24*context.resources.displayMetrics.density
-        val layers=listOf("urban-poi-labels","urban-road-labels","urban-roads","poi-labels","road-labels","roads","county-labels","place-labels","locality-labels").filter {style?.getLayer(it)!=null}.toTypedArray()
+        val names=listOf("urban-poi-labels","urban-road-labels","urban-roads","poi-labels","road-labels","roads","county-labels","place-labels","locality-labels")
+        val layers=(if (hasOnlineOverview) names + names.map { "embedded-$it" } else names).filter {style?.getLayer(it)!=null}.toTypedArray()
         val features=if(layers.isEmpty()) emptyList() else ready.queryRenderedFeatures(RectF(anchor.x-radius,anchor.y-radius,anchor.x+radius,anchor.y+radius),*layers)
         suggestedName=features.firstNotNullOfOrNull {feature->listOf("name:zh-Hans","name:zh","name","name:en").firstNotNullOfOrNull {key->runCatching {feature.getStringProperty(key)}.getOrNull()?.takeIf {it.isNotBlank()}}} ?: ""
         val coordinates="%.6f, %.6f".format(target.latitude,target.longitude)
@@ -256,7 +326,16 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private fun refreshMapInfo() {
         val ready=map ?: return
         if(BuildConfig.ONLINE_MAPS) {
-            onMapInfo(if(!MapNetwork.connected(context)) "当前无网络，仅显示已缓存的地图\n照片和作品仍可在本机查看与记录" else if(basemapMode==BasemapMode.SATELLITE) "联网卫星影像：2016 年 · 约 10 米\n${if(ready.cameraPosition.zoom>14) "已超过影像清晰度；可切换街道图" else "仅加载地图，照片与作品不上传"}" else "")
+            val zoom = ready.cameraPosition.zoom
+            val info = when {
+                !MapNetwork.connected(context) && hasOnlineOverview -> "无网络 · 显示内置地图和已缓存细节"
+                !MapNetwork.connected(context) -> "无网络 · 显示已缓存的地图"
+                basemapMode==BasemapMode.SATELLITE && hasOnlineOverview && zoom<OnlineMapAssets.SATELLITE_DETAIL_ZOOM ->
+                    "内置卫星概览 · 2016 年"
+                basemapMode==BasemapMode.SATELLITE -> "卫星影像 · 2016 年 · 约 10 米"
+                else -> ""
+            }
+            onMapInfo(info)
             return
         }
         val citySatellite=urban.contains(center.latitude,center.longitude)
