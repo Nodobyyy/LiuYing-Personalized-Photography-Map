@@ -10,7 +10,7 @@ Online 版（`cn.photomap.online`）支持切换简洁底图、街道图和卫�
 
 ## 下载与使用
 
-在 [GitHub Releases](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map-App/releases) 下载 Online 调试版。安装后，点地图上的「＋」选择拍摄地点，再从系统相册导入照片。点照片标记可查看该地点的作品，点「底图」可切换地图样式，点「数据」可导出或恢复备份。
+在 GitHub Releases 下载 Online 调试版。安装后，点地图上的「＋」选择拍摄地点，再从系统相册导入照片。点照片标记可查看该地点的作品，点「底图」可切换地图样式，点「数据」可导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
 
 ## 当前局限与后续方向
 
@@ -62,3 +62,7 @@ try {
 </details>
 
 地图构建工具在 `tools/`。 [地图数据与许可](docs/MAP_DATA.md) · [架构与数据安全](docs/ARCHITECTURE.md)
+
+## 代码许可
+
+留影公开项目自有源代码，采用 PolyForm Noncommercial 1.0.0。可按条款进行非商业使用、修改和分发。商业使用须另行获得权利人授权。第三方依赖、地图数据和字体分别适用各自的许可。 [许可证全文](LICENSE) · [地图数据与许可](docs/MAP_DATA.md)
