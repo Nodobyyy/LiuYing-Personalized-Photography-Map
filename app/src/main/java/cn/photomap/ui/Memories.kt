@@ -44,16 +44,15 @@ fun Memories(
     val dateFormat = remember { DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日") }
     val anchor = remember(days, anniversary) { anniversaryPage(days, anniversary) }
     val pager = rememberPagerState(initialPage = anchor) { days.size }
-    FullScreenDialog(onDismiss = onClose, dark = dark) {
+    FullScreenDialog(onDismiss = onClose, dark = dark, compactTop = true) {
         val colors = MaterialTheme.colorScheme
         Column(
             Modifier
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(colors.surface, colors.surfaceVariant, colors.surface)))
-                .systemBarsPadding()
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -93,7 +92,7 @@ fun Memories(
                     state = pager,
                     reverseLayout = true,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(vertical = 12.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 10.dp),
                     pageSpacing = 16.dp,
                     key = { days[it].date.toEpochDay() }
                 ) { index ->
@@ -170,12 +169,6 @@ fun Memories(
                         }
                     }
                 }
-                Text(
-                    "较早的照片在上方 · 较晚的照片在下方",
-                    Modifier.align(Alignment.CenterHorizontally).padding(10.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant
-                )
             }
         }
     }

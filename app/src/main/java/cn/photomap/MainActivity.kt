@@ -230,6 +230,7 @@ class MainActivity : ComponentActivity() {
         pending = pending.map { if (it.photo.id == item.photo.id) item else it }
     }
     private fun openMemories() = work("正在整理拍摄日期") {
+        engine.stopGlobeSpin()
         memoryToday = LocalDate.now()
         memoryDays = library.photoDays().filter { it.date <= memoryToday }
     }
@@ -267,9 +268,18 @@ class MainActivity : ComponentActivity() {
             else -> lightColorScheme(primary = Color(0xff315b49))
         }
         val panelOpen = selected != null || settings || mapOptions || picking || reviewingImport || draft != null
+        val needsBackdrop = panelOpen && !(BuildConfig.ONLINE_MAPS && (settings || mapOptions))
+        var showAttribution by remember { mutableStateOf(BuildConfig.ONLINE_MAPS) }
+        LaunchedEffect(Unit) {
+            if (BuildConfig.ONLINE_MAPS) {
+                delay(5_000)
+                showAttribution = false
+            }
+        }
         var backdrop by remember { mutableStateOf<ImageBitmap?>(null) }
-        LaunchedEffect(panelOpen) {
-            if (panelOpen && android.os.Build.VERSION.SDK_INT >= 31) {
+        LaunchedEffect(panelOpen, needsBackdrop) {
+            if (panelOpen) engine.stopGlobeSpin()
+            if (needsBackdrop && android.os.Build.VERSION.SDK_INT >= 31) {
                 engine.snapshot { backdrop = it.asImageBitmap() }
             } else backdrop = null
         }
@@ -338,9 +348,8 @@ class MainActivity : ComponentActivity() {
                     }
                 } else if (BuildConfig.ONLINE_MAPS) {
                     OnlineMapChrome(
-                        places.size, places.sumOf { it.photoCount }, pending.size, mapInfo,
-                        basemapMode == BasemapMode.SATELLITE,
-                        !busy, { mapOptions = true }, { settings = true }, ::openMapSources, { engine.national() },
+                        places.size, places.sumOf { it.photoCount }, pending.size, mapInfo, showAttribution,
+                        !busy, { mapOptions = true }, { settings = true }, { engine.national() },
                         ::startPicking, ::beginDirectImport, ::openMemories
                     )
                 } else {
@@ -489,7 +498,7 @@ class MainActivity : ComponentActivity() {
                     }},confirmButton={TextButton(onClick={work("正在保存照片文字") {library.editPhoto(photo,title,note,date,parameters,camera.takeIf { BuildConfig.ONLINE_MAPS });editingPhoto=null;reload()}},enabled=!busy && (date.isBlank() || runCatching {LocalDate.parse(date)}.isSuccess)) {Text("保存",fontWeight=FontWeight.SemiBold)}},dismissButton={TextButton(onClick={editingPhoto=null},enabled=!busy) {Text("取消")}})
                 }
                 if(settings) SettingsSheet(dark)
-                if(mapOptions) MapPanelSheet(onDismissRequest={mapOptions=false}) {
+                if(mapOptions) MapPanelSheet(onDismissRequest={mapOptions=false},opaque=BuildConfig.ONLINE_MAPS) {
                     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start=20.dp,end=20.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                         Text("选择底图",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold)
                         BasemapChoices()
@@ -536,7 +545,7 @@ class MainActivity : ComponentActivity() {
     }
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable private fun SettingsSheet(dark: Boolean) {
-        MapPanelSheet(onDismissRequest={if(!busy) settings=false}) {
+        MapPanelSheet(onDismissRequest={if(!busy) settings=false},opaque=BuildConfig.ONLINE_MAPS) {
             LazyColumn(Modifier.fillMaxWidth().padding(horizontal=20.dp),contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item {Text("本地数据",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold);Text("${places.size} 个地点 / ${places.sumOf {it.photoCount}} 张原图，全部保存在应用私有目录。卸载会清除作品，请先备份。",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 item {if(busy) {LinearProgressIndicator(Modifier.fillMaxWidth());Text(progress)};if(lastMessage.isNotBlank()) Text(lastMessage,style=MaterialTheme.typography.bodySmall)}
@@ -578,7 +587,7 @@ class MainActivity : ComponentActivity() {
         work("正在读取本地许可") {
             licenseText = withContext(Dispatchers.IO) {
                 val files = if (BuildConfig.ONLINE_MAPS) {
-                    val online = listOf("ONLINE-LICENSE.txt", "FONT-LICENSE.txt", "VIEW-SOURCES.txt", "BOUNDARY-LICENSE.txt")
+                    val online = listOf("ONLINE-LICENSE.txt", "FONT-LICENSE.txt", "VIEW-SOURCES.txt", "BOUNDARY-LICENSE.txt", "WORLD-BOUNDARY-SOURCES.txt")
                     if (engine.hasOnlineOverview) online + listOf("overview/LICENSE.txt", "overview/SATELLITE-LICENSE.txt") else online
                 } else listOf("LICENSE.txt", "FONT-LICENSE.txt", "VIEW-SOURCES.txt", "BOUNDARY-LICENSE.txt", "SATELLITE-LICENSE.txt", "URBAN-LICENSE.txt")
                 files.joinToString("\n\n") { name -> assets.open("maps/$name").bufferedReader().use { it.readText() } }
@@ -587,7 +596,13 @@ class MainActivity : ComponentActivity() {
     }
     override fun onStart() {super.onStart();if(::engine.isInitialized && !startupError) engine.view.onStart()}
     override fun onResume() {super.onResume();if(::engine.isInitialized && !startupError) {engine.view.onResume();engine.connectivityChanged()}}
-    override fun onPause() {if(::engine.isInitialized && !startupError) engine.view.onPause();super.onPause()}
+    override fun onPause() {
+        if (::engine.isInitialized && !startupError) {
+            engine.stopGlobeSpin()
+            engine.view.onPause()
+        }
+        super.onPause()
+    }
     override fun onStop() {if(::engine.isInitialized && !startupError) engine.view.onStop();super.onStop()}
     override fun onSaveInstanceState(outState: Bundle) {super.onSaveInstanceState(outState);if(::engine.isInitialized && !startupError) engine.view.onSaveInstanceState(outState)}
     override fun onLowMemory() {super.onLowMemory();if(::engine.isInitialized && !startupError) engine.view.onLowMemory()}

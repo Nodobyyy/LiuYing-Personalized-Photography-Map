@@ -35,11 +35,10 @@ fun OnlineMapChrome(
     photoCount: Int,
     pendingCount: Int,
     detail: String,
-    satellite: Boolean,
+    showAttribution: Boolean,
     enabled: Boolean,
     onMap: () -> Unit,
     onData: () -> Unit,
-    onSources: () -> Unit,
     onNational: () -> Unit,
     onPick: () -> Unit,
     onImport: () -> Unit,
@@ -90,6 +89,8 @@ fun OnlineMapChrome(
                             ) { statsText ->
                                 Text(statsText, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                             }
+                            if (showAttribution) Text("© OpenStreetMap · OpenMapTiles · OpenFreeMap · Protomaps · EOX",
+                                style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                         }
                     }
                 }
@@ -190,12 +191,6 @@ fun OnlineMapChrome(
                             Text(label, fontWeight = FontWeight.SemiBold)
                         }
                     }
-                }
-            }
-            FrostedPanel(shape = pill, elevation = 2.dp) {
-                TextButton(onClick = onSources, contentPadding = PaddingValues(horizontal = 10.dp)) {
-                    Text(if (satellite) "© OpenStreetMap · EOX ⓘ" else "© OpenStreetMap ⓘ",
-                        style = MaterialTheme.typography.labelSmall)
                 }
             }
         }

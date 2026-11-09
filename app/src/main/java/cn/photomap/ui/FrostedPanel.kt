@@ -241,9 +241,14 @@ fun LiquidGlassCard(
 fun MapPanelSheet(
     onDismissRequest: () -> Unit,
     skipPartiallyExpanded: Boolean = true,
+    opaque: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = skipPartiallyExpanded)
+    if (opaque) {
+        ModalBottomSheet(onDismissRequest, sheetState = state, containerColor = MaterialTheme.colorScheme.surface, content = content)
+        return
+    }
     ModalBottomSheet(
         onDismissRequest,
         sheetState = state,

@@ -133,8 +133,12 @@ object OnlineMapAssets {
                 layers.put(outside.put("filter", filter))
             }
             layer.put("id", "embedded-$id").put("source", "overview")
-            // Briefly overlap the local and network details while zooming in.
-            val limit = if (layer.getString("type") == "symbol") 11.5 else 13.0
+            // Keep a coarse street network visible while detailed tiles arrive.
+            val roads = layer.optString("source-layer") == "roads"
+            val limit = if (roads) 18.0 else if (layer.getString("type") == "symbol") 11.5 else 13.0
+            if (roads && layer.getString("type") == "line") {
+                layer.getJSONObject("paint").put("line-opacity", JSONArray("""["interpolate",["linear"],["zoom"],11,1,14,0.48]"""))
+            }
             if (id != "land") {
                 val max = minOf(layer.optDouble("maxzoom", 24.0), limit)
                 if (layer.optDouble("minzoom", 0.0) >= max) continue

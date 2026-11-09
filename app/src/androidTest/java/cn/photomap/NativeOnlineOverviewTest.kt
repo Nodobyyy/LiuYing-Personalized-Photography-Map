@@ -81,8 +81,30 @@ class NativeOnlineOverviewTest {
                     val occluded = projection.javaClass.getMethod("isLocationOccluded", LatLng::class.java)
                     assertEquals(true, occluded.invoke(projection, LatLng(-22.0, -76.0)))
                 }
+                await("Bundled countries must show borders on the globe") {
+                    it.queryRenderedFeatures(viewport, "world-country-borders").isNotEmpty()
+                }
+                screenshot("online054-globe")
+                shell("input swipe 790 960 270 960 65")
+                SystemClock.sleep(1300)
+                var longitude = 0.0
+                scenario.onActivity { longitude = map(it)!!.cameraPosition.target!!.longitude }
                 SystemClock.sleep(1200)
-                screenshot("online05-globe")
+                scenario.onActivity {
+                    val camera = map(it)!!.cameraPosition
+                    assertTrue("A quick swipe should keep the globe moving", kotlin.math.abs(camera.target!!.longitude - longitude) > 15)
+                    assertEquals("The globe easter egg must keep north up", 0.0, camera.bearing, 0.01)
+                }
+                shell("input tap 540 960")
+                scenario.onActivity { longitude = map(it)!!.cameraPosition.target!!.longitude }
+                SystemClock.sleep(800)
+                scenario.onActivity {
+                    assertEquals("Touching the map should stop the spin", longitude, map(it)!!.cameraPosition.target!!.longitude, 0.05)
+                    map(it)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(35.0, 108.0), 5.0))
+                }
+                await("Chinese provincial boundaries must be visible offline") {
+                    it.queryRenderedFeatures(viewport, "china-province-borders").isNotEmpty()
+                }
                 for ((name, location) in listOf("Paris" to LatLng(48.8566, 2.3522),
                     "Tokyo" to LatLng(35.6762, 139.6503), "New York" to LatLng(40.7128, -74.0060))) {
                     scenario.onActivity { activity ->

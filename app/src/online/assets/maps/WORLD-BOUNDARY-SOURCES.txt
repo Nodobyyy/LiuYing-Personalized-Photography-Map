@@ -1,0 +1,10 @@
+Natural Earth v5.1.2, public domain.
+https://www.naturalearthdata.com/about/terms-of-use/
+
+National land boundaries
+https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_50m_admin_0_boundary_lines_land.geojson
+
+First-level administrative boundaries outside China
+https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_10m_admin_1_states_provinces_lines.geojson
+
+The bundled geometry is simplified for the overview. China province boundaries come from china-view.json. Finer boundaries use OpenFreeMap/OpenMapTiles and depend on available data.

@@ -28,6 +28,7 @@ import org.maplibre.geojson.*
 import java.security.MessageDigest
 import kotlin.math.abs
 import kotlin.math.log2
+import kotlin.math.hypot
 
 class PhotoMapEngine(private val context: Context, private val scope: CoroutineScope, private val library: Library,
     private val packages: MapPackages, private val onSelect: (List<Place>) -> Unit, private val onStatus: (String) -> Unit,
@@ -60,6 +61,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private var selection: String?=null
     private var revision=0
     private var fitFirstView=false
+    private var globeSpin: GlobeSpin? = null
     var suggestedName="";private set
     private fun inCoverage(latitude: Double, longitude: Double) =
         cn.photomap.data.PhotoPoint(latitude, longitude).inCoverage
@@ -67,11 +69,12 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     var picking=false
         set(value) {
             field=value
+            if (value) stopGlobeSpin()
             style?.getLayer("user-photo-covers")?.setProperties(visibility(if(value) Property.NONE else Property.VISIBLE))
             if(value) refreshPickHint() else refresh()
         }
     val center: LatLng get()=(map?.cameraPosition?.target ?: LatLng(35.0,105.0)).let { if (BuildConfig.ONLINE_MAPS) it.wrap() else it }
-    init { MapLibre.getInstance(context);if(BuildConfig.ONLINE_MAPS) MapNetwork.configure(); view=MapView(context,MapLibreMapOptions.createFromAttributes(context).localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif"));view.setBackgroundColor(Color.rgb(233,236,231)) }
+    init { MapLibre.getInstance(context);if(BuildConfig.ONLINE_MAPS) MapNetwork.configure(context); view=MapView(context,MapLibreMapOptions.createFromAttributes(context).localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif"));view.setBackgroundColor(Color.rgb(233,236,231)) }
     fun create(saved: android.os.Bundle?) {
         if(BuildConfig.ONLINE_MAPS) MapNetwork.configureCache(context)
         view.onCreate(saved)
@@ -84,7 +87,10 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             ready.setMaxZoomPreference(17.0)
             if (BuildConfig.ONLINE_MAPS) {
                 ready.setTileCacheEnabled(true)
-                ready.setPrefetchZoomDelta(2)
+                ready.setPrefetchZoomDelta(1)
+                globeSpin = GlobeSpin(view, ready, {
+                    !picking && style != null && ready.cameraPosition.zoom <= globeMinimum() + .1
+                }, ::refresh)
             }
             // Native gesture constraint is applied while panning. Never move the
             // camera from idle callbacks: that caused a visible jump after release.
@@ -93,6 +99,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             fitFirstView=!prefs.contains("zoom")
             ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).bearing(0.0).tilt(0.0).build()
             ready.addOnCameraIdleListener {
+                if (globeSpin?.spinning == true) return@addOnCameraIdleListener
                 ready.cameraPosition.let { c->c.target?.let { raw->val p=if(BuildConfig.ONLINE_MAPS) raw.wrap() else raw; prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
                 chooseMap(); refresh();refreshPickHint();refreshMapInfo()
             }
@@ -103,7 +110,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                     val lookup=items.associateBy { it.id }
                     val hit=displayed.minByOrNull { c->val a=lookup[c.members.first().id]?.let { ready.projection.toScreenLocation(LatLng(it.latitude,it.longitude)) }; if(a==null) Double.MAX_VALUE else (a.x-p.x).toDouble()*(a.x-p.x)+(a.y-p.y).toDouble()*(a.y-p.y) }
                     val anchor=hit?.members?.firstOrNull()?.id?.let { lookup[it] }?.let { ready.projection.toScreenLocation(LatLng(it.latitude,it.longitude)) }
-                    val hitDp=maxOf(22.0,MapViewport.markerDp(ready.cameraPosition.zoom)*144/128/2+4)
+                    val hitDp=maxOf(22.0,photoMarkerDp(ready.cameraPosition.zoom)*144/128/2+4)
                     if(hit!=null && anchor!=null && abs(anchor.x-p.x)<hitDp*context.resources.displayMetrics.density && abs(anchor.y-p.y)<hitDp*context.resources.displayMetrics.density) {
                         val members=hit.members.mapNotNull { lookup[it.id] }; val positions=members.map { LatLng(it.latitude,it.longitude) }
                         if(members.size==1 || positions.distinct().size<2 || ready.cameraPosition.zoom>=16) onSelect(members)
@@ -148,10 +155,11 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     fun theme(isDark: Boolean) { if(dark!=isDark) { dark=isDark; selectedMap=""; chooseMap(force=true) } }
     fun reloadPackages() { scope.launch { regional=withContext(Dispatchers.IO) { packages.list() };loadedPackages.clear(); selectedMap=""; chooseMap(true) } }
     private fun nationalCamera()=CameraUpdateFactory.newLatLngBounds(LatLngBounds.Builder().include(LatLng(54.0,136.0)).include(LatLng(3.0,73.0)).build(),36)
-    fun national() { map?.animateCamera(overviewCamera()) }
+    fun stopGlobeSpin() { globeSpin?.stop() }
+    fun national() { stopGlobeSpin(); map?.animateCamera(overviewCamera()) }
     private fun globeMinimum(): Double {
         val width = minOf(view.width, view.height) / context.resources.displayMetrics.density
-        return log2((width * .79 * Math.PI / 512).coerceAtLeast(1.0))
+        return log2((width * .94 * Math.PI / 512).coerceAtLeast(1.0))
     }
     private fun overviewCamera() = if (BuildConfig.ONLINE_MAPS) {
         CameraUpdateFactory.newCameraPosition(CameraPosition.Builder()
@@ -165,10 +173,14 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         map?.snapshot { bitmap -> onReady(bitmap) }
     }
     fun focusSearch(latitude: Double, longitude: Double) {
+        stopGlobeSpin()
         map?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), 15.0))
         refreshPickHint()
     }
-    fun focus(latitude: Double, longitude: Double) { map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude,longitude),maxOf(10.0,map?.cameraPosition?.zoom ?: 10.0))) }
+    fun focus(latitude: Double, longitude: Double) {
+        stopGlobeSpin()
+        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude,longitude),maxOf(10.0,map?.cameraPosition?.zoom ?: 10.0)))
+    }
     private fun chooseMap(force: Boolean=false) {
         val ready=map ?: return; if(applying) return
         if(BuildConfig.ONLINE_MAPS) {if(selectedMap!="online" || force){activeSatellite=satellite;fineSatelliteLoaded=true;applyStyle(base,"online")};return}
@@ -201,6 +213,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     }
     private fun applyStyle(bundle: LocalMapBundle.Loaded?, key: String) {
         val ready=map ?: return
+        stopGlobeSpin()
         job?.cancel(); style=null; icons=emptySet(); selectedMap=key; applying=true
         val json=JSONObject(bundle?.style ?: """{"version":8,"sources":{},"layers":[{"id":"background","type":"background","paint":{"background-color":"#e9ece7"}}]}""")
         if(bundle!=null) {MapAppearance.apply(json,basemapMode,activeSatellite,contextStyle);ChinaMapLabels.apply(json,china,global=BuildConfig.ONLINE_MAPS)}
@@ -238,13 +251,17 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
             }
         }
+        if (BuildConfig.ONLINE_MAPS && bundle != null) {
+            OnlineBoundaries.apply(json, china, dark, basemapMode == BasemapMode.SATELLITE)
+        }
         ready.setStyle(Style.Builder().fromJson(json.toString())) { loaded ->
             style=loaded; applying=false
             loaded.addSource(GeoJsonSource("user-photos",FeatureCollection.fromFeatures(emptyArray<Feature>())))
             val density=context.resources.displayMetrics.density
             loaded.addLayer(SymbolLayer("user-photo-covers","user-photos").withProperties(iconImage(get("icon")),iconAllowOverlap(true),iconIgnorePlacement(true),
                 visibility(if(picking) Property.NONE else Property.VISIBLE),
-                iconSize(interpolate(linear(),zoom(),stop(3,28f/128*density),stop(8,32f/128*density),stop(13,40f/128*density),stop(16,48f/128*density)))))
+                iconSize(interpolate(linear(),zoom(),stop(3,photoMarkerDp(3.0).toFloat()/128*density),
+                    stop(8,photoMarkerDp(8.0).toFloat()/128*density),stop(13,40f/128*density),stop(16,48f/128*density)))))
             val maxZoom=json.optJSONObject("sources")?.let { sources->sources.keys().asSequence().map {sources.getJSONObject(it)}.filter {it.optString("type")=="vector"}.map {it.optDouble("maxzoom",12.0)}.maxOrNull() } ?: 0.0
             (context.applicationContext as? PhotoMapApplication)?.startupDiagnostics?.mapReady()
             onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
@@ -280,8 +297,9 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             PhotoPoint(place.id, point.x.toDouble(), point.y.toDouble(), place.photoCount)
         }
         val density=context.resources.displayMetrics.density
-        val clusterRadius=MapViewport.clusterRadiusDp(ready.cameraPosition.zoom)*density
-        val markerDp=kotlin.math.round(MapViewport.markerDp(ready.cameraPosition.zoom)).toFloat()
+        val size = photoMarkerDp(ready.cameraPosition.zoom)
+        val clusterRadius=(hypot(size, size * 144 / 128) + 8)*density
+        val markerDp=kotlin.math.round(size).toFloat()
         job=scope.launch {
             val clusters=withContext(Dispatchers.Default) { PhotoClustering.cluster(points,clusterRadius,seed) }
             val visible=clusters.filter { it.x in -80.0*density..view.width+80.0*density && it.y in -80.0*density..view.height+80.0*density }
@@ -367,5 +385,13 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         p.color=Color.rgb(36,59,50);c.drawRoundRect(RectF(126-width,top,126f,140f),6*pixelPerDp,6*pixelPerDp,p)
         p.color=Color.WHITE;p.textAlign=Paint.Align.CENTER;c.drawText(label,126-width/2,top+(140-top-(p.descent()+p.ascent()))/2,p);return result
     }
-    fun destroy() { job?.cancel(); view.onDestroy() }
+    private fun photoMarkerDp(zoom: Double): Double {
+        if (!BuildConfig.ONLINE_MAPS) return MapViewport.markerDp(zoom)
+        return when {
+            zoom <= 8 -> 38.0
+            zoom < 13 -> 38 + (zoom - 8) * .4
+            else -> MapViewport.markerDp(zoom)
+        }
+    }
+    fun destroy() { stopGlobeSpin(); job?.cancel(); view.onDestroy() }
 }
