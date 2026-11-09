@@ -337,12 +337,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 } else if (BuildConfig.ONLINE_MAPS) {
-                    val satellite = if (basemapMode == BasemapMode.SATELLITE) "EOX · Sentinel 2016\n" else ""
                     OnlineMapChrome(
                         places.size, places.sumOf { it.photoCount }, pending.size, mapInfo,
-                        satellite + "© OSM contributors · © OpenMapTiles · OpenFreeMap" +
-                            if (engine.hasOnlineOverview) " · Protomaps" else "",
-                        !busy, { mapOptions = true }, { settings = true }, { engine.national() },
+                        basemapMode == BasemapMode.SATELLITE,
+                        !busy, { mapOptions = true }, { settings = true }, ::openMapSources, { engine.national() },
                         ::startPicking, ::beginDirectImport, ::openMemories
                     )
                 } else {
@@ -568,17 +566,22 @@ class MainActivity : ComponentActivity() {
                 item {HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f));Spacer(Modifier.height(4.dp));Text(if(BuildConfig.ONLINE_MAPS) "地图与缓存" else "离线地图",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold);Spacer(Modifier.height(6.dp));Column(verticalArrangement=Arrangement.spacedBy(8.dp)){BasemapChoices()};Spacer(Modifier.height(6.dp));Text(mapStatus,style=MaterialTheme.typography.bodySmall);Text(if(BuildConfig.ONLINE_MAPS) "地图服务可获知请求区域及 IP。地点搜索使用 Android 系统服务或 Photon，仅提交你输入的地名。照片、EXIF、地点记录和备份均保存在本机。已浏览区域自动缓存。" else "APK 内置基础概览。一次导入全国精细包后，全国街道统一最高 Z15；当前地图中心进入覆盖区时自动使用。放大超过原始数据精度不会增加细节。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 if(!BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={launchSystemPicker {importMap.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("导入离线地图包（全国 / 地区）")}}
                 if(BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存（保留照片）")}}
-                item {TextButton(onClick={work("正在读取本地许可") {licenseText=withContext(Dispatchers.IO) {
-                    val files = if(BuildConfig.ONLINE_MAPS) {
-                        val online = listOf("ONLINE-LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt")
-                        if (engine.hasOnlineOverview) online + listOf("overview/LICENSE.txt", "overview/SATELLITE-LICENSE.txt") else online
-                    } else listOf("LICENSE.txt","FONT-LICENSE.txt","VIEW-SOURCES.txt","BOUNDARY-LICENSE.txt","SATELLITE-LICENSE.txt","URBAN-LICENSE.txt")
-                    (if(BuildConfig.ONLINE_MAPS) "联网版使用全球 OpenFreeMap 街道与 EOX 2016 卫星底图。" else "APK 内置全国概览与周边背景；全国 Z15 街道和城区精细影像通过全国离线包导入。")+"当前交互地图未取得正式审图通过证明，参考图的审图号不代表本应用审图通过。\n\n"+files.joinToString("\n\n") {name->assets.open("maps/$name").bufferedReader().use {it.readText()}}
-                }}},enabled=!busy) {Text("查看地图来源与许可（离线）")}}
+                item {TextButton(onClick=::openMapSources,enabled=!busy) {Text("查看地图来源与许可（离线）")}}
                 items(maps,key={it.directory.name}) { map->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {Column(Modifier.weight(1f)) {Text(map.name);Text("Z${map.minZoom.toInt()}–${map.maxZoom.toInt()}",style=MaterialTheme.typography.bodySmall)};TextButton(onClick={confirmation="移除地区地图包？摄影记录不受影响。" to {work("正在移除地图包") {packages.remove(map);maps=withContext(Dispatchers.IO) {packages.list()};engine.reloadPackages()}}},enabled=!busy) {Text("移除")}}}
                 item {TextButton(onClick={launchSystemPicker {diagnosticExport.launch("PhotoMap-startup.txt")}}) {Text("导出启动故障报告")}}
                 item {Text(if(BuildConfig.ONLINE_MAPS) "本版不需要导入全国地图包，可与离线版同时安装。两版作品分别保存在各自私有目录，可通过完整备份 ZIP 互相迁移。" else "全国精细包同时包含全国 Z15 街道、建筑与景点，以及城区精细卫星影像。全部数据保存在本机；导入前自动检查可用空间并校验完整性，成功后可删除原 ZIP。景点和路名完整度仍受上游数据限制。",style=MaterialTheme.typography.bodySmall)}
                 item {Text("留影 ${BuildConfig.VERSION_NAME} · 无账号、无云同步、无广告。地图数据署名请见上方，数据来源与许可随 APK 保留。",style=MaterialTheme.typography.bodySmall)}
+            }
+        }
+    }
+    private fun openMapSources() {
+        work("正在读取本地许可") {
+            licenseText = withContext(Dispatchers.IO) {
+                val files = if (BuildConfig.ONLINE_MAPS) {
+                    val online = listOf("ONLINE-LICENSE.txt", "FONT-LICENSE.txt", "VIEW-SOURCES.txt", "BOUNDARY-LICENSE.txt")
+                    if (engine.hasOnlineOverview) online + listOf("overview/LICENSE.txt", "overview/SATELLITE-LICENSE.txt") else online
+                } else listOf("LICENSE.txt", "FONT-LICENSE.txt", "VIEW-SOURCES.txt", "BOUNDARY-LICENSE.txt", "SATELLITE-LICENSE.txt", "URBAN-LICENSE.txt")
+                files.joinToString("\n\n") { name -> assets.open("maps/$name").bufferedReader().use { it.readText() } }
             }
         }
     }

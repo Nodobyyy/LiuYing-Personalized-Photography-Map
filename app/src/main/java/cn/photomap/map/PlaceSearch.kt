@@ -30,7 +30,10 @@ object PlaceSearch {
         delay((lastRequest + 1_000 - SystemClock.elapsedRealtime()).coerceAtLeast(0))
         lastRequest = SystemClock.elapsedRealtime()
         val matches = withContext(Dispatchers.IO) {
-            val url = endpoint.newBuilder().addQueryParameter("q", query).addQueryParameter("limit", "6").build()
+            val university = query.endsWith("大学") || query.endsWith("学院")
+            val url = endpoint.newBuilder().addQueryParameter("q", query).addQueryParameter("limit", "12").apply {
+                if (university) addQueryParameter("osm_tag", "amenity:university")
+            }.build()
             val request = Request.Builder().url(url).header("User-Agent", "LiuYing-Android/0.5").build()
             client.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) throw IOException("Place search unavailable")
@@ -41,12 +44,15 @@ object PlaceSearch {
                         val feature = features.getJSONObject(index)
                         val coordinates = feature.getJSONObject("geometry").getJSONArray("coordinates")
                         val properties = feature.getJSONObject("properties")
-                        val parts = listOf("name", "street", "city", "state", "country")
+                        val name = properties.optString("name")
+                        if (university && !name.contains(query, ignoreCase = true)) continue
+                        val parts = listOf("name", "street", "district", "city", "state", "country")
                             .map { properties.optString(it) }.filter { it.isNotBlank() }.distinct()
                         if (parts.isEmpty()) continue
                         add(Address(Locale.getDefault()).apply {
                             latitude = coordinates.getDouble(1)
                             longitude = coordinates.getDouble(0)
+                            featureName = name
                             setAddressLine(0, parts.joinToString(" · "))
                         })
                     }

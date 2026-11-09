@@ -35,10 +35,11 @@ fun OnlineMapChrome(
     photoCount: Int,
     pendingCount: Int,
     detail: String,
-    credits: String,
+    satellite: Boolean,
     enabled: Boolean,
     onMap: () -> Unit,
     onData: () -> Unit,
+    onSources: () -> Unit,
     onNational: () -> Unit,
     onPick: () -> Unit,
     onImport: () -> Unit,
@@ -138,7 +139,7 @@ fun OnlineMapChrome(
                         enabled = enabled,
                         interactionSource = earthBtnInteraction,
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-                    ) { Text("地球", fontWeight = FontWeight.Medium) }
+                    ) { Text("归位", fontWeight = FontWeight.Medium) }
                 }
             }
             FrostedPanel(Modifier.fillMaxWidth(), panel, elevation = 10.dp) {
@@ -191,16 +192,12 @@ fun OnlineMapChrome(
                     }
                 }
             }
-            Text(
-                credits,
-                Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.surface.copy(alpha = .78f))
-                    .border(0.5.dp, colors.outlineVariant.copy(alpha = .4f), RoundedCornerShape(12.dp))
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.onSurfaceVariant
-            )
+            FrostedPanel(shape = pill, elevation = 2.dp) {
+                TextButton(onClick = onSources, contentPadding = PaddingValues(horizontal = 10.dp)) {
+                    Text(if (satellite) "© OpenStreetMap · EOX ⓘ" else "© OpenStreetMap ⓘ",
+                        style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
     }
 }

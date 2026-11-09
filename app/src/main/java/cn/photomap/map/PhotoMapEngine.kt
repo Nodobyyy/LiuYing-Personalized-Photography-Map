@@ -67,7 +67,6 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     var picking=false
         set(value) {
             field=value
-            if (BuildConfig.ONLINE_MAPS) map?.uiSettings?.isCompassEnabled = !value
             style?.getLayer("user-photo-covers")?.setProperties(visibility(if(value) Property.NONE else Property.VISIBLE))
             if(value) refreshPickHint() else refresh()
         }
@@ -78,13 +77,10 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         view.onCreate(saved)
         view.getMapAsync { ready ->
             map=ready
-            ready.uiSettings.isRotateGesturesEnabled=BuildConfig.ONLINE_MAPS; ready.uiSettings.isTiltGesturesEnabled=false
+            ready.uiSettings.isRotateGesturesEnabled=false; ready.uiSettings.isTiltGesturesEnabled=false
             ready.uiSettings.isScrollGesturesEnabled=true;ready.uiSettings.isZoomGesturesEnabled=true;ready.uiSettings.isDoubleTapGesturesEnabled=true
             ready.uiSettings.isLogoEnabled=false;ready.uiSettings.isAttributionEnabled=false
-            if (BuildConfig.ONLINE_MAPS) {
-                val density = context.resources.displayMetrics.density
-                ready.uiSettings.setCompassMargins(0, (126 * density).toInt(), (16 * density).toInt(), 0)
-            }
+            if (BuildConfig.ONLINE_MAPS) ready.uiSettings.isCompassEnabled = false
             ready.setMaxZoomPreference(17.0)
             if (BuildConfig.ONLINE_MAPS) {
                 ready.setTileCacheEnabled(true)
@@ -95,7 +91,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             if (!BuildConfig.ONLINE_MAPS) ready.setLatLngBoundsForCameraTarget(LatLngBounds.from(60.0,144.0,-2.0,66.0))
             val prefs=context.getSharedPreferences("map-camera",Context.MODE_PRIVATE)
             fitFirstView=!prefs.contains("zoom")
-            ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).build()
+            ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).bearing(0.0).tilt(0.0).build()
             ready.addOnCameraIdleListener {
                 ready.cameraPosition.let { c->c.target?.let { raw->val p=if(BuildConfig.ONLINE_MAPS) raw.wrap() else raw; prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
                 chooseMap(); refresh();refreshPickHint();refreshMapInfo()

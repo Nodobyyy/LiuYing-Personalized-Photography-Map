@@ -1,14 +1,5 @@
 package cn.photomap.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
@@ -16,6 +7,8 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +27,8 @@ import coil.request.ImageRequest
 import cn.photomap.BuildConfig
 import cn.photomap.data.*
 import org.json.JSONObject
+import java.util.Locale
+import kotlin.math.roundToInt
 
 data class ViewedPhoto(val photo: Photo, val record: Record)
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -61,7 +56,7 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
                     }
                 }
             }
-            HorizontalPager(pager,modifier=Modifier.weight(1f),beyondViewportPageCount=0) { index ->
+            HorizontalPager(pager,modifier=Modifier.weight(if (info) 0.8f else 1f),beyondViewportPageCount=0) { index ->
                 var scale by remember {mutableFloatStateOf(1f)}
                 var translation by remember {mutableStateOf(Offset.Zero)}
                 val transform=rememberTransformableState { zoom,pan,_->scale=(scale*zoom).coerceIn(1f,6f); translation=if(scale==1f) Offset.Zero else translation+pan }
@@ -74,37 +69,40 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
             entries.getOrNull(pager.currentPage)?.let { entry ->
                 val p=entry.photo
                 FrostedPanel(
-                    Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().then(if (info) Modifier.weight(1f, fill = false) else Modifier)
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(26.dp),
                     elevation = 8.dp
                 ) {
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 18.dp, vertical = 14.dp)
-                            .animateContentSize(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)),
+                            .then(if (info) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         val recordTitle = entry.record.title.takeUnless { BuildConfig.ONLINE_MAPS && it == "照片导入" }.orEmpty()
                         Text(p.title.ifBlank {recordTitle}.ifBlank {p.filename},color=Color.White,style=MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines=2)
                         Text(p.date.ifBlank {entry.record.date},color=Color.LightGray, style = MaterialTheme.typography.labelMedium)
-                        AnimatedVisibility(
-                            visible = info,
-                            enter = fadeIn(tween(200)) + expandVertically(),
-                            exit = fadeOut(tween(150)) + shrinkVertically()
-                        ) {
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        if (info) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                                 val noteText = p.note.ifBlank {entry.record.note}
-                                if (noteText.isNotBlank()) Text(noteText,color=Color.White,maxLines=5, style = MaterialTheme.typography.bodyMedium)
-                                val meta=runCatching {JSONObject(p.exif)}.getOrDefault(JSONObject())
-                                val overrides = if (BuildConfig.ONLINE_MAPS) p.cameraOverrides() else emptyMap()
-                                val keys = cameraFields + listOf("gps_latitude" to "GPS纬度", "gps_longitude" to "GPS经度")
-                                Text("${p.width} × ${p.height}" + (if(p.shotAt.isNotBlank()) " · ${p.shotAt}" else "") + keys.mapNotNull { (key,label)->(overrides[key] ?: meta.optString(key)).takeIf {it.isNotBlank()}?.let {"$label $it"} }.joinToString(" · ",prefix="\n"),color=Color.LightGray,style=MaterialTheme.typography.bodySmall)
-                                meta.optString("manual_parameters").takeIf {it.isNotBlank()}?.let {Text("参数补充 / 更正：$it",color=Color.LightGray,style=MaterialTheme.typography.bodySmall,maxLines=3)}
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    TextButton(onClick={onEdit(p)}) {Text("编辑文字与参数")}
-                                    TextButton(onClick={onDelete(p)}) {Text("删除应用内副本", color = Color(0xffffb4ab))}
+                                if (noteText.isNotBlank()) Text(noteText, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                val meta = remember(p.exif) { runCatching { JSONObject(p.exif) }.getOrDefault(JSONObject()) }
+                                val overrides = remember(p.exif) {
+                                    if (BuildConfig.ONLINE_MAPS) runCatching { p.cameraOverrides() }.getOrDefault(emptyMap()) else emptyMap()
                                 }
+                                val keys = cameraFields + listOf("gps_latitude" to "GPS纬度", "gps_longitude" to "GPS经度")
+                                PhotoInfoRow("尺寸", "${p.width} × ${p.height}")
+                                if (p.shotAt.isNotBlank()) PhotoInfoRow("拍摄时间", p.shotAt)
+                                for ((key, label) in keys) {
+                                    val value = overrides[key] ?: meta.optString(key)
+                                    if (value.isNotBlank()) PhotoInfoRow(label, formatExifValue(key, value))
+                                }
+                                meta.optString("manual_parameters").takeIf { it.isNotBlank() }?.let { PhotoInfoRow("补充参数", it) }
+                                HorizontalDivider(color = Color.White.copy(alpha = .16f))
+                                TextButton(onClick = { onEdit(p) }, modifier = Modifier.fillMaxWidth()) { Text("编辑文字与参数") }
+                                TextButton(onClick = { onDelete(p) }, modifier = Modifier.fillMaxWidth()) { Text("删除应用内副本", color = Color(0xffffb4ab)) }
                             }
                         }
                     }
@@ -112,6 +110,29 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
             }
         }
         }
+    }
+}
+
+@Composable
+private fun PhotoInfoRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, Modifier.weight(.36f), color = Color.LightGray, style = MaterialTheme.typography.bodySmall)
+        Text(value, Modifier.weight(.64f), color = Color.White, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private fun formatExifValue(key: String, value: String): String {
+    val parts = value.split('/', limit = 2)
+    val numerator = parts[0].toDoubleOrNull() ?: return value
+    val denominator = if (parts.size == 2) parts[1].toDoubleOrNull() ?: return value else 1.0
+    val number = (numerator / denominator).takeIf { it.isFinite() } ?: return value
+    val decimal = "%.3f".format(Locale.ROOT, number).trimEnd('0').trimEnd('.')
+    return when (key) {
+        "gps_latitude", "gps_longitude" -> "%.6f".format(Locale.ROOT, number)
+        "focal_length" -> "$decimal mm"
+        "aperture" -> "f/$decimal"
+        "shutter_speed" -> if (number in 0.00001..0.5) "1/${(1.0 / number).roundToInt()} s" else "$decimal s"
+        else -> value
     }
 }
 

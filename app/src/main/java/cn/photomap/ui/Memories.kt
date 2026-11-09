@@ -91,6 +91,7 @@ fun Memories(
                 }
                 VerticalPager(
                     state = pager,
+                    reverseLayout = true,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(vertical = 12.dp),
                     pageSpacing = 16.dp,
@@ -170,7 +171,7 @@ fun Memories(
                     }
                 }
                 Text(
-                    "上滑看更早 · 下滑看更新",
+                    "较早的照片在上方 · 较晚的照片在下方",
                     Modifier.align(Alignment.CenterHorizontally).padding(10.dp),
                     style = MaterialTheme.typography.labelMedium,
                     color = colors.onSurfaceVariant

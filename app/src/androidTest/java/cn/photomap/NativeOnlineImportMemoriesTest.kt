@@ -79,6 +79,27 @@ class NativeOnlineImportMemoriesTest {
             }
             screenshot.recycle()
         }
+        val width = app.resources.displayMetrics.widthPixels
+        val height = app.resources.displayMetrics.heightPixels
+        fun revealBelow(text: String, start: Int, end: Int) {
+            repeat(5) {
+                if (find(instrumentation.uiAutomation.rootInActiveWindow, text, false) != null) return
+                shell("input swipe ${width / 2} $start ${width / 2} $end 320")
+                SystemClock.sleep(250)
+            }
+            waitFor(text)
+        }
+        fun assertAboveNavigation(text: String) {
+            val bounds = android.graphics.Rect()
+            waitFor(text).getBoundsInScreen(bounds)
+            val screenshot = instrumentation.uiAutomation.takeScreenshot()
+            try {
+                val safeBottom = screenshot.height - (24 * app.resources.displayMetrics.density).toInt()
+                assertTrue("$text overlaps the navigation area: $bounds", bounds.bottom <= safeBottom)
+            } finally {
+                screenshot.recycle()
+            }
+        }
         try {
             shell("svc wifi enable")
             shell("svc data enable")
@@ -90,11 +111,13 @@ class NativeOnlineImportMemoriesTest {
                         .apply { isAccessible = true }.invoke(activity, uris)
                 }
                 waitFor("补填导入信息")
+                assertAboveNavigation("放弃待补填")
                 val imported = app.library.photoDays().flatMap { it.photos }.filter { it.photo.filename in names }
                 assertEquals(3, imported.size)
                 assertTrue(imported.all { it.photo.exif.contains("LiuYing QA") })
                 assertTrue(imported.any { it.photo.date == anchor.toString() })
-                capture("online04-review.png")
+                revealBelow("地图选点", height * 7 / 10, height / 3)
+                capture("online053-review.png")
                 tap("地图选点")
                 waitFor("当前导入的照片")
                 tap("搜索地名或经纬度")
@@ -103,6 +126,7 @@ class NativeOnlineImportMemoriesTest {
                 waitFor(", 2.352")
                 capture("online05-location-picker.png")
                 tap("确定位置")
+                assertAboveNavigation("保存 1 张")
                 tap("保存 1 张")
                 waitFor("忆往昔")
                 val complete = app.library.photoDays().flatMap { it.photos }.filter { it.photo.filename in names }
@@ -111,14 +135,21 @@ class NativeOnlineImportMemoriesTest {
                 waitFor("回到 ${anchor.format(label)} 前后")
                 capture("online04-memories.png")
                 waitFor("去年今天 · 2 张")
-                val width = app.resources.displayMetrics.widthPixels
-                val height = app.resources.displayMetrics.heightPixels
-                shell("input swipe ${width / 2} ${height * 7 / 10} ${width / 2} ${height * 3 / 10} 280")
+                shell("input swipe ${width / 2} ${height * 3 / 10} ${width / 2} ${height * 7 / 10} 280")
                 waitFor(anchor.minusDays(3).format(label))
-                shell("input swipe ${width / 2} ${height * 3 / 10} ${width / 2} ${height * 7 / 10} 280")
+                shell("input swipe ${width / 2} ${height * 7 / 10} ${width / 2} ${height * 3 / 10} 280")
                 waitFor("去年今天 · 2 张")
-                shell("input swipe ${width / 2} ${height * 3 / 10} ${width / 2} ${height * 7 / 10} 280")
+                shell("input swipe ${width / 2} ${height * 7 / 10} ${width / 2} ${height * 3 / 10} 280")
                 waitFor(anchor.plusDays(4).format(label))
+                tap(names[2], exact = true)
+                tap("信息", exact = true)
+                revealBelow("GPS纬度", height * 9 / 10, height * 6 / 10)
+                revealBelow("删除应用内副本", height * 9 / 10, height * 6 / 10)
+                waitFor("编辑文字与参数")
+                assertAboveNavigation("删除应用内副本")
+                capture("online053-photo-details.png")
+                tap("返回")
+                waitFor("忆往昔")
                 tap("返回")
                 complete.filter { it.photo.date == anchor.toString() }.forEach { app.library.removePhoto(it.photo.id) }
                 tap("忆往昔")

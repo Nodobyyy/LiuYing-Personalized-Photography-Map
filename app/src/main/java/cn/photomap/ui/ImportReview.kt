@@ -170,11 +170,11 @@ fun ImportReview(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDiscard, enabled = !busy) { Text("放弃待补填") }
+                        TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.weight(1f)) { Text("放弃待补填") }
                         Button(
                             onClick = onSave,
                             enabled = ready > 0 && !busy,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1.3f),
                             shape = RoundedCornerShape(18.dp)
                         ) { Text("保存 $ready 张", fontWeight = FontWeight.SemiBold) }
                     }

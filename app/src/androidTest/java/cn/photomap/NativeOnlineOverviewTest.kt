@@ -60,6 +60,8 @@ class NativeOnlineOverviewTest {
                 await("Bundled map style did not load") { it.style?.getSource("overview") != null }
                 scenario.onActivity { activity ->
                     val globe = map(activity)!!
+                    assertFalse(globe.uiSettings.isRotateGesturesEnabled)
+                    assertEquals(0.0, globe.cameraPosition.bearing, 0.01)
                     globe.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(22.0, 104.0), 0.0))
                     assertNull(globe.style?.getLayer("china-reference-outline"))
                     assertNull(globe.style?.getLayer("china-display-mask"))

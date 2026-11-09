@@ -37,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import cn.photomap.map.PlaceSearch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -81,20 +83,23 @@ fun PickLocationPanel(
         }
         status = "正在搜索…"
         try {
-            val system = try {
-                withTimeoutOrNull(2_500) { searchAddresses(Geocoder(context), submitted) }.orEmpty()
-            } catch (_: IOException) {
-                emptyList()
+            val term = submitted
+            coroutineScope {
+                val photon = async { lookup { PlaceSearch.find(term) } }
+                val system = async { lookup { withTimeoutOrNull(2_500) { searchAddresses(Geocoder(context), term) } } }
+                val local = system.await()
+                results = mergePlaces(local.orEmpty())
+                if (results.isNotEmpty() && !photon.isCompleted) status = "正在补充其他地点…"
+                val remote = photon.await()
+                results = mergePlaces(local.orEmpty() + remote.orEmpty())
+                status = when {
+                    results.isNotEmpty() -> ""
+                    local == null && remote == null -> "地点搜索暂不可用，可输入经纬度或拖动地图"
+                    else -> "没有找到地点，试试加上城市或校区名"
+                }
             }
-            val valid = system.filter { it.hasLatitude() && it.hasLongitude() }
-            results = valid.ifEmpty { PlaceSearch.find(submitted) }
-            status = if (results.isEmpty()) "没有找到地点，试试加上城市名" else ""
-        } catch (_: IOException) {
-            status = "地点搜索暂不可用，可输入经纬度或拖动地图"
         } catch (_: IllegalArgumentException) {
             status = "请输入有效的地名或经纬度"
-        } catch (_: JSONException) {
-            status = "地点搜索暂不可用，可输入经纬度或拖动地图"
         }
         submitted = ""
     }
@@ -163,6 +168,7 @@ fun PickLocationPanel(
                                     .background(colors.surface.copy(alpha = 0.55f))
                                     .clickable {
                                         query = label
+                                        submitted = ""
                                         results = emptyList()
                                         onResult(address.latitude, address.longitude, label)
                                     }
@@ -173,6 +179,7 @@ fun PickLocationPanel(
                             )
                         }
                     }
+                    Text("找到 ${results.size} 个地点，可滑动查看", style = MaterialTheme.typography.labelSmall)
                     Text(
                         "地点搜索 · Android / Photon · © OpenStreetMap",
                         style = MaterialTheme.typography.labelSmall,
@@ -195,14 +202,39 @@ fun PickLocationPanel(
     }
 }
 
+private suspend fun lookup(search: suspend () -> List<Address>?): List<Address>? = try {
+    search()
+} catch (_: IOException) {
+    null
+} catch (_: JSONException) {
+    null
+}
+
+private fun mergePlaces(addresses: List<Address>): List<Address> = buildList {
+    val distance = FloatArray(1)
+    for (address in addresses) {
+        if (!address.hasLatitude() || !address.hasLongitude() ||
+            address.latitude !in -90.0..90.0 || address.longitude !in -180.0..180.0) continue
+        val duplicate = any { other ->
+            val name = address.featureName?.trim().orEmpty()
+            val otherName = other.featureName?.trim().orEmpty()
+            val sameName = name.isNotBlank() && name.equals(otherName, ignoreCase = true)
+            val sameLabel = address.getAddressLine(0)?.equals(other.getAddressLine(0), ignoreCase = true) == true
+            android.location.Location.distanceBetween(other.latitude, other.longitude, address.latitude, address.longitude, distance)
+            (sameName || sameLabel) && distance[0] < 180f
+        }
+        if (!duplicate) add(address)
+    }
+}
+
 @Suppress("DEPRECATION")
 private suspend fun searchAddresses(geocoder: Geocoder, query: String): List<Address> {
     if (!Geocoder.isPresent()) throw IOException("Geocoding service unavailable")
     if (Build.VERSION.SDK_INT < 33) return withContext(Dispatchers.IO) {
-        geocoder.getFromLocationName(query, 6).orEmpty()
+        geocoder.getFromLocationName(query, 12).orEmpty()
     }
     return suspendCancellableCoroutine { continuation ->
-        geocoder.getFromLocationName(query, 6, object : Geocoder.GeocodeListener {
+        geocoder.getFromLocationName(query, 12, object : Geocoder.GeocodeListener {
             override fun onGeocode(addresses: MutableList<Address>) = continuation.resume(addresses)
             override fun onError(errorMessage: String?) = continuation.resumeWithException(IOException(errorMessage))
         })
