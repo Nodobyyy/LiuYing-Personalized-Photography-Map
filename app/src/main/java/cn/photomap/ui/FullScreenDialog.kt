@@ -28,7 +28,11 @@ import androidx.core.view.WindowCompat
                 it.setLayout(WindowManager.LayoutParams.MATCH_PARENT,WindowManager.LayoutParams.MATCH_PARENT)
                 it.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
                 it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(background.toArgb()))
-                it.statusBarColor=background.toArgb();it.navigationBarColor=background.toArgb()
+                @Suppress("DEPRECATION")
+                if(Build.VERSION.SDK_INT<35) {
+                    it.statusBarColor=background.toArgb()
+                    it.navigationBarColor=background.toArgb()
+                }
                 WindowCompat.getInsetsController(it,view).apply {isAppearanceLightStatusBars=!dark;isAppearanceLightNavigationBars=!dark}
                 view.requestApplyInsets()
             }
@@ -37,3 +41,4 @@ import androidx.core.view.WindowCompat
         content()
     }
 }
+
