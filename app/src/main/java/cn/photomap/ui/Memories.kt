@@ -42,8 +42,9 @@ fun Memories(
     onOpen: (PhotoDay, Int) -> Unit
 ) {
     val dateFormat = remember { DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日") }
-    val anchor = remember(days, anniversary) { anniversaryPage(days, anniversary) }
-    val pager = rememberPagerState(initialPage = anchor) { days.size }
+    val timeline = remember(days) { days.sortedBy { it.date } }
+    val anchor = remember(timeline, anniversary) { anniversaryPage(timeline, anniversary) }
+    val pager = rememberPagerState(initialPage = anchor) { timeline.size }
     FullScreenDialog(onDismiss = onClose, dark = dark, compactTop = true) {
         val colors = MaterialTheme.colorScheme
         Column(
@@ -90,13 +91,12 @@ fun Memories(
                 }
                 VerticalPager(
                     state = pager,
-                    reverseLayout = true,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 10.dp),
                     pageSpacing = 16.dp,
-                    key = { days[it].date.toEpochDay() }
+                    key = { timeline[it].date.toEpochDay() }
                 ) { index ->
-                    val day = days[index]
+                    val day = timeline[index]
                     val first = day.photos.first()
                     val shape = RoundedCornerShape(30.dp)
                     Column(

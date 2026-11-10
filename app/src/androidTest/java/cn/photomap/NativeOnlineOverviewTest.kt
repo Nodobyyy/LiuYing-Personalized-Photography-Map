@@ -29,10 +29,10 @@ class NativeOnlineOverviewTest {
             ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command))
                 .use { it.readBytes() }
         }
-        fun map(activity: MainActivity): MapLibreMap? {
-            val engine = MainActivity::class.java.getDeclaredField("engine").apply { isAccessible = true }.get(activity)
-            return PhotoMapEngine::class.java.getDeclaredField("map").apply { isAccessible = true }.get(engine) as? MapLibreMap
-        }
+        fun engine(activity: MainActivity) =
+            MainActivity::class.java.getDeclaredField("engine").apply { isAccessible = true }.get(activity) as PhotoMapEngine
+        fun map(activity: MainActivity) =
+            PhotoMapEngine::class.java.getDeclaredField("map").apply { isAccessible = true }.get(engine(activity)) as? MapLibreMap
         fun screenshot(name: String): Int {
             val bitmap = instrumentation.uiAutomation.takeScreenshot()
             val colors = mutableSetOf<Int>()
@@ -58,16 +58,22 @@ class NativeOnlineOverviewTest {
                     fail(reason)
                 }
                 await("Bundled map style did not load") { it.style?.getSource("overview") != null }
+                scenario.onActivity { it.chooseBasemap(BasemapMode.STREETS) }
+                await("Street overview style did not load") { it.style?.getLayer("context-land") != null }
                 scenario.onActivity { activity ->
                     val globe = map(activity)!!
                     assertFalse(globe.uiSettings.isRotateGesturesEnabled)
                     assertEquals(0.0, globe.cameraPosition.bearing, 0.01)
-                    globe.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(22.0, 104.0), 0.0))
+                    engine(activity).national()
                     assertNull(globe.style?.getLayer("china-reference-outline"))
                     assertNull(globe.style?.getLayer("china-display-mask"))
                 }
                 SystemClock.sleep(900)
                 var minimum = Double.NaN
+                scenario.onActivity { activity ->
+                    map(activity)!!.moveCamera(CameraUpdateFactory.zoomOut())
+                }
+                SystemClock.sleep(300)
                 scenario.onActivity { activity ->
                     val globe = map(activity)!!
                     minimum = globe.cameraPosition.zoom
@@ -81,10 +87,37 @@ class NativeOnlineOverviewTest {
                     val occluded = projection.javaClass.getMethod("isLocationOccluded", LatLng::class.java)
                     assertEquals(true, occluded.invoke(projection, LatLng(-22.0, -76.0)))
                 }
-                await("Bundled countries must show borders on the globe") {
-                    it.queryRenderedFeatures(viewport, "world-country-borders").isNotEmpty()
+                // Checking the rendered pixels catches tile clipping failures that
+                // feature queries alone miss (the tiles can still be queryable).
+                var australia = android.graphics.PointF()
+                var border = android.graphics.PointF()
+                scenario.onActivity {
+                    australia = map(it)!!.projection.toScreenLocation(LatLng(-19.0, 132.0))
+                    border = map(it)!!.projection.toScreenLocation(LatLng(50.5443, 102.3364))
+                    val offset = IntArray(2)
+                    engine(it).view.getLocationOnScreen(offset)
+                    australia.offset(offset[0].toFloat(), offset[1].toFloat())
+                    border.offset(offset[0].toFloat(), offset[1].toFloat())
+                }
+                val rendered = (0..15).any {
+                    SystemClock.sleep(300)
+                    val bitmap = instrumentation.uiAutomation.takeScreenshot()
+                    try {
+                        val land = bitmap.getPixel(australia.x.toInt(), australia.y.toInt())
+                        val borderDrawn = (-6..6).any { dx ->
+                            (-6..6).any { dy ->
+                                val color = bitmap.getPixel(border.x.toInt() + dx, border.y.toInt() + dy)
+                                android.graphics.Color.red(color) in 130..195 &&
+                                    android.graphics.Color.green(color) in 130..195
+                            }
+                        }
+                        android.graphics.Color.red(land) > 220 && android.graphics.Color.green(land) > 220 && borderDrawn
+                    } finally {
+                        bitmap.recycle()
+                    }
                 }
                 screenshot("online054-globe")
+                assertTrue("The globe should show inland Australia and the Mongolia–Russia border", rendered)
                 shell("input swipe 790 960 270 960 65")
                 SystemClock.sleep(1300)
                 var longitude = 0.0
@@ -148,8 +181,10 @@ class NativeOnlineOverviewTest {
                 await("Embedded satellite source missing") {
                     it.style?.getSourceAs<RasterSource>("satellite-overview")?.url?.startsWith("pmtiles://file://") == true
                 }
-                SystemClock.sleep(2500)
-                assertTrue("Expected real local satellite image colours", screenshot("online041-local-satellite") > 45)
+                assertTrue("Expected real local satellite image colours", (0..10).any {
+                    SystemClock.sleep(1000)
+                    screenshot("online041-local-satellite") > 45
+                })
 
                 shell("svc wifi enable")
                 shell("svc data enable")

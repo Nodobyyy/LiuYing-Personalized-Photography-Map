@@ -8,7 +8,11 @@
 
 **离线版暂时停止维护，后续更新集中在 Online（联网版）。** 现有离线版仍可使用，也可通过「数据」导出备份，在 Online 版恢复作品。两版可以并装。
 
-Online 版（`cn.photomap.online`）支持简洁底图、全球街道图和卫星图。缩至最小可拖动完整地球，放大时按需通过 OpenFreeMap 加载道路与景点，并通过 EOX 加载卫星影像。手动选点时可搜索地名（优先使用 Android 系统服务，必要时使用 Photon），也可直接输入经纬度。地图服务商会收到瓦片请求和连接信息，地点搜索服务会收到用户主动提交的地名。照片、EXIF、作品、备注及备份保留在本机。
+Online 版（`cn.photomap.online`）支持简洁底图、全球街道图和卫星图。地球和地图保持正北朝上，国家、省州与区县边界随缩放逐级显示。最小缩放时快速横划可让地球持续自转，触摸地图或点「归位」即可停止。
+
+地球视图先显示 APK 内置的街道或卫星概览。放大后先显示本地主要道路，再通过 OpenFreeMap 按需加载街道与景点，通过 EOX 加载卫星影像。手动选点可搜索地名或输入经纬度。地图服务商会收到瓦片请求和连接信息，地点搜索服务会收到用户主动提交的地名。照片、EXIF、作品、备注及备份保留在本机。
+
+「忆往昔」打开时定位到去年同一天或最近的拍摄日期。较早的照片在上方，较晚的在下方。
 
 ## 下载与使用
 
@@ -32,7 +36,7 @@ Online 版（`cn.photomap.online`）支持简洁底图、全球街道图和卫�
 
 需要 JDK 17、Android SDK Platform 35 / Build Tools 35.0.0、Node.js 24（数据工具）。Windows 使用 Gradle Wrapper 8.9。
 
-从 [MapLibre Native 的 globe 预发行版](https://github.com/maplibre/maplibre-native/releases/tag/android-v2026.10.19-globe) 下载 `MapLibreAndroid-opengl-release-android-v2026.10.19-globe.aar`，放入 `.tooling/maplibre-globe/`。SHA-256 为 `a05fedd9eb1eddf90792f0938bf573c79f15b8dd24d1a5ecd1289916d89e3531`。
+从 [MapLibre Native 的 globe 预发行版](https://github.com/maplibre/maplibre-native/releases/tag/android-v2026.11.2-globe) 下载 `MapLibreAndroid-opengl-release-android-v2026.11.2-globe.aar`，放入 `.tooling/maplibre-globe/`。SHA-256 为 `75837162745f97f36623460c991678f4452311d6de9f1a90895a8e889775c74d`。
 
 ```powershell
 ./gradlew.bat :core:test :app:testOnlineDebugUnitTest :app:assembleOnlineDebug :app:lintOnlineDebug
@@ -54,6 +58,8 @@ node tools/stage-online-overview.mjs
 ```
 
 准备完资源后再运行 Gradle 构建命令。未准备地图资源时也可构建按需联网的开发包。
+
+地球概览图已随源码提供。更新内置地图数据后，可在 PowerShell 运行 `pwsh -File tools/build-globe-overviews.ps1` 重新生成。街道概览使用内置 Protomaps 地形和 Natural Earth 边界，卫星概览使用内置 EOX 影像。
 
 <details>
 <summary>历史离线版构建步骤</summary>

@@ -33,7 +33,7 @@ class NativeOnlineMapTest {
             waitFor{it.style?.getSource("base")!=null}
             scenario.onActivity { activity ->
                 val nativeMap = checkNotNull(map(activity))
-                assertEquals(2, nativeMap.prefetchZoomDelta)
+                assertEquals(4, nativeMap.prefetchZoomDelta)
                 assertTrue(nativeMap.tileCacheEnabled)
             }
             scenario.onActivity {it.chooseBasemap(BasemapMode.STREETS);map(it)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.882,116.412),14.0))}

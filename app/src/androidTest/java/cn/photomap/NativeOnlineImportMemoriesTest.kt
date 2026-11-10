@@ -81,9 +81,12 @@ class NativeOnlineImportMemoriesTest {
         }
         val width = app.resources.displayMetrics.widthPixels
         val height = app.resources.displayMetrics.heightPixels
-        fun revealBelow(text: String, start: Int, end: Int) {
+        fun revealBelow(text: String, start: Int, end: Int, safeBottom: Int = Int.MAX_VALUE) {
             repeat(5) {
-                if (find(instrumentation.uiAutomation.rootInActiveWindow, text, false) != null) return
+                val node = find(instrumentation.uiAutomation.rootInActiveWindow, text, false)
+                val bounds = android.graphics.Rect()
+                node?.getBoundsInScreen(bounds)
+                if (node != null && bounds.bottom <= safeBottom) return
                 shell("input swipe ${width / 2} $start ${width / 2} $end 320")
                 SystemClock.sleep(250)
             }
@@ -135,16 +138,21 @@ class NativeOnlineImportMemoriesTest {
                 waitFor("回到 ${anchor.format(label)} 前后")
                 capture("online04-memories.png")
                 waitFor("去年今天 · 2 张")
-                shell("input swipe ${width / 2} ${height * 3 / 10} ${width / 2} ${height * 7 / 10} 280")
+                val swipeTop = height * 19 / 100
+                val swipeBottom = height * 85 / 100
+                shell("input swipe ${width / 2} $swipeTop ${width / 2} $swipeBottom 360")
                 waitFor(anchor.minusDays(3).format(label))
-                shell("input swipe ${width / 2} ${height * 7 / 10} ${width / 2} ${height * 3 / 10} 280")
+                instrumentation.waitForIdleSync()
+                shell("input swipe ${width / 2} $swipeBottom ${width / 2} $swipeTop 360")
                 waitFor("去年今天 · 2 张")
-                shell("input swipe ${width / 2} ${height * 7 / 10} ${width / 2} ${height * 3 / 10} 280")
+                instrumentation.waitForIdleSync()
+                shell("input swipe ${width / 2} $swipeBottom ${width / 2} $swipeTop 360")
                 waitFor(anchor.plusDays(4).format(label))
                 tap(names[2], exact = true)
                 tap("信息", exact = true)
                 revealBelow("GPS纬度", height * 9 / 10, height * 6 / 10)
-                revealBelow("删除应用内副本", height * 9 / 10, height * 6 / 10)
+                revealBelow("删除应用内副本", height * 9 / 10, height * 6 / 10,
+                    safeBottom = height - (24 * app.resources.displayMetrics.density).toInt())
                 waitFor("编辑文字与参数")
                 assertAboveNavigation("删除应用内副本")
                 capture("online053-photo-details.png")

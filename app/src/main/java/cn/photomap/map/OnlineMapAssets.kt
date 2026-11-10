@@ -13,10 +13,40 @@ object OnlineMapAssets {
     const val STREET_DETAIL_ZOOM = 10.5
     const val SATELLITE_DETAIL_ZOOM = 8
     private const val WORLD_SATELLITE_TRANSITION = 4
+    internal const val GLOBE_TILE_ZOOM = 4.8
     private const val OVERVIEW = "maps/overview"
     private val archives = listOf("china.pmtiles", "context.pmtiles", "satellite-overview.pmtiles", "world-satellite.pmtiles", "world-roads.pmtiles")
 
     data class Loaded(val streets: LocalMapBundle.Loaded, val satellite: JSONObject, val hasOverview: Boolean)
+
+    internal fun prepareGlobeOverview(style: JSONObject, mode: BasemapMode, dark: Boolean): String {
+        val satellite = mode == BasemapMode.SATELLITE
+        val image = when {
+            satellite -> "globe-satellite.png"
+            dark -> "globe-streets-night.png"
+            else -> "globe-streets-day.png"
+        }
+        val baseIds = setOf(
+            "context-land", "context-water", "embedded-land", "embedded-water",
+            "world-country-borders", "world-uncertain-borders",
+            "satellite-world", "satellite-overview", "satellite-online-world"
+        )
+        for (layer in style.layers()) {
+            val id = layer.optString("id")
+            val type = layer.optString("type")
+            val minimum = when {
+                type == "background" && satellite -> {
+                    layer.put("layout", JSONObject().put("visibility", "none"))
+                    continue
+                }
+                type == "background" || (id in baseIds && !(satellite && type == "line")) -> GLOBE_TILE_ZOOM
+                type == "symbol" -> 2.0 // Avoid crowded country labels at the rim of the whole globe.
+                else -> continue
+            }
+            layer.put("minzoom", maxOf(layer.optDouble("minzoom", 0.0), minimum))
+        }
+        return "maps/$image"
+    }
 
     fun load(context:Context): Loaded {
         val manifest=JSONObject(context.assets.open("maps/online-files.json").bufferedReader().use {it.readText()}).getJSONObject("files")
@@ -49,12 +79,12 @@ object OnlineMapAssets {
             val regionalWorldLayer = JSONObject(remoteLayer.toString())
                 .put("id", "satellite-online-world").put("minzoom", WORLD_SATELLITE_TRANSITION)
                 .put("maxzoom", SATELLITE_DETAIL_ZOOM)
-            // The low-zoom globe raster and the regional raster overlap at very
-            // different tile levels. Keep them separate through the transition.
             val localLayer = overview.satellite.getJSONArray("layers").getJSONObject(0)
                 .put("minzoom", WORLD_SATELLITE_TRANSITION)
+            // Retain the bundled global image underneath detailed satellite tiles.
+            // It covers the transition and regions outside the local detail pack.
             satellite.put("layers", JSONArray()
-                .put(JSONObject("""{"id":"satellite-world","source":"satellite-world","type":"raster","maxzoom":4,"paint":{"raster-fade-duration":0}}"""))
+                .put(JSONObject("""{"id":"satellite-world","source":"satellite-world","type":"raster","paint":{"raster-fade-duration":0}}"""))
                 .put(regionalWorldLayer)
                 .put(localLayer)
                 .put(remoteLayer))

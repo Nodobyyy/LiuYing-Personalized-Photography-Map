@@ -48,7 +48,7 @@ dependencies {
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     "offlineImplementation"("org.maplibre.gl:android-sdk:11.8.0")
-    "onlineImplementation"(files(rootProject.file(".tooling/maplibre-globe/MapLibreAndroid-opengl-release-android-v2026.10.19-globe.aar")))
+    "onlineImplementation"(files(rootProject.file(".tooling/maplibre-globe/MapLibreAndroid-opengl-release-android-v2026.11.2-globe.aar")))
     "onlineImplementation"("org.maplibre.gl:android-sdk-geojson:6.0.1")
     "onlineImplementation"("org.maplibre.gl:android-sdk-turf:6.0.1")
     "onlineImplementation"("org.maplibre.gl:maplibre-android-gestures:0.0.4")

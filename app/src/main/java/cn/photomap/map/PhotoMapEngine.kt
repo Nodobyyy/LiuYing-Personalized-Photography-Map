@@ -2,6 +2,7 @@ package cn.photomap.map
 
 import android.content.Context
 import android.graphics.*
+import android.widget.FrameLayout
 import cn.photomap.LocalMapBundle
 import cn.photomap.BuildConfig
 import cn.photomap.PhotoMapApplication
@@ -34,6 +35,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private val packages: MapPackages, private val onSelect: (List<Place>) -> Unit, private val onStatus: (String) -> Unit,
     private val onPickContext: (String,Boolean)->Unit={_,_->},private val onMapInfo: (String)->Unit={}) {
     val view: MapView
+    val mapContainer: FrameLayout
+    private val globeBackdrop = if (BuildConfig.ONLINE_MAPS) GlobeBackdrop(context) else null
     private var map: MapLibreMap?=null
     private var style: Style?=null
     private var base: LocalMapBundle.Loaded?=null
@@ -74,7 +77,23 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             if(value) refreshPickHint() else refresh()
         }
     val center: LatLng get()=(map?.cameraPosition?.target ?: LatLng(35.0,105.0)).let { if (BuildConfig.ONLINE_MAPS) it.wrap() else it }
-    init { MapLibre.getInstance(context);if(BuildConfig.ONLINE_MAPS) MapNetwork.configure(context); view=MapView(context,MapLibreMapOptions.createFromAttributes(context).localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif"));view.setBackgroundColor(Color.rgb(233,236,231)) }
+    init {
+        MapLibre.getInstance(context)
+        if (BuildConfig.ONLINE_MAPS) MapNetwork.configure(context)
+        val options = MapLibreMapOptions.createFromAttributes(context)
+            .localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif")
+        // The transparent texture lets the globe show behind native map labels and markers.
+        if (BuildConfig.ONLINE_MAPS) options.textureMode(true).translucentTextureSurface(true)
+        view = MapView(context, options)
+        view.setBackgroundColor(if (BuildConfig.ONLINE_MAPS) Color.TRANSPARENT else Color.rgb(233,236,231))
+        mapContainer = FrameLayout(context).apply {
+            if (globeBackdrop != null) {
+                setBackgroundColor(Color.BLACK)
+                addView(globeBackdrop)
+            }
+            addView(view)
+        }
+    }
     fun create(saved: android.os.Bundle?) {
         if(BuildConfig.ONLINE_MAPS) MapNetwork.configureCache(context)
         view.onCreate(saved)
@@ -87,7 +106,10 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             ready.setMaxZoomPreference(17.0)
             if (BuildConfig.ONLINE_MAPS) {
                 ready.setTileCacheEnabled(true)
-                ready.setPrefetchZoomDelta(1)
+                // Load a coarse parent first so a zoom change can keep drawing
+                // a complete globe while the new visible tiles are prepared.
+                ready.setPrefetchZoomDelta(4)
+                ready.addOnCameraMoveListener { globeBackdrop?.cameraChanged() }
                 globeSpin = GlobeSpin(view, ready, {
                     !picking && style != null && ready.cameraPosition.zoom <= globeMinimum() + .1
                 }, ::refresh)
@@ -251,11 +273,19 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
             }
         }
-        if (BuildConfig.ONLINE_MAPS && bundle != null) {
-            OnlineBoundaries.apply(json, china, dark, basemapMode == BasemapMode.SATELLITE)
-        }
+        val isSatellite = basemapMode == BasemapMode.SATELLITE
+        val globeOverview = if (BuildConfig.ONLINE_MAPS && bundle != null) {
+            OnlineBoundaries.apply(json, china, dark, isSatellite)
+            OnlineMapAssets.prepareGlobeOverview(json, basemapMode, dark)
+        } else null
         ready.setStyle(Style.Builder().fromJson(json.toString())) { loaded ->
             style=loaded; applying=false
+            if (globeOverview != null) scope.launch {
+                val bitmap = withContext(Dispatchers.IO) {
+                    context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) }
+                }
+                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite)
+            }
             loaded.addSource(GeoJsonSource("user-photos",FeatureCollection.fromFeatures(emptyArray<Feature>())))
             val density=context.resources.displayMetrics.density
             loaded.addLayer(SymbolLayer("user-photo-covers","user-photos").withProperties(iconImage(get("icon")),iconAllowOverlap(true),iconIgnorePlacement(true),
