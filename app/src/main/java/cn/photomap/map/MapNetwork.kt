@@ -78,8 +78,14 @@ object MapNetwork {
             if (u.encodedPath != "/planet") tileCalls.incrementAndGet()
             chain.proceed(r)
         }
-        val client = OkHttpClient.Builder().dispatcher(Dispatcher().apply { maxRequestsPerHost = 12 }).connectTimeout(6, TimeUnit.SECONDS)
-            .addInterceptor(metadataCache).addNetworkInterceptor(check).build()
+        val client = OkHttpClient.Builder()
+            // Avoid having too many tile transfers compete on a slow connection.
+            .dispatcher(Dispatcher().apply { maxRequestsPerHost = 6 })
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor(metadataCache)
+            .addNetworkInterceptor(check)
+            .build()
         HttpRequestUtil.setPrintRequestUrlOnFailure(false)
         HttpRequestUtil.setOkHttpClient(client)
         configured = true
