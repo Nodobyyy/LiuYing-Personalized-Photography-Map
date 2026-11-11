@@ -18,9 +18,9 @@ Online 版在手机桌面显示为「留影」（`cn.photomap.online`），支�
 
 ## 下载与使用
 
-在 GitHub Releases 下载最新 Online 调试版（当前最新为 `v0.6.3`）。点「导入照片」可批量读取拍摄日期和 GPS，缺少信息时可补填。点「地图选点」也可先确定位置再添加照片。点照片标记查看作品，点「底图」切换地图样式，点「数据」导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
+在 GitHub Releases 下载最新 Online 调试版（当前最新为 `v0.6.4`）。点「导入照片」可批量读取拍摄日期和 GPS，缺少信息时可补填。点「地图选点」也可先确定位置再添加照片。点照片标记查看作品，点「底图」切换地图样式，点「数据」导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
 
-## 近期重点更新（v0.5.7 – v0.6.3）
+## 近期重点更新（v0.5.7 – v0.6.4）
 
 - **全球卫星底图全量接入国内 CDN（免 VPN 秒开）+ 端侧 GCJ-02 实时纠偏**：
   - **中国境内**：直连高德卫星 CDN（`webst01-04.is.autonavi.com`，最高 Z18），通过端侧实时像素重采样消除火星坐标偏移，并结合内置中国国界多边形与 JPEG 魔数校验自动过滤“此区域无卫星图”占位块。

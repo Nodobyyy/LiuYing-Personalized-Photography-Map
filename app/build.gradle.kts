@@ -21,8 +21,8 @@ android {
         create("online") {
             dimension = "mapMode"
             applicationIdSuffix = ".online"
-            versionCode = 19
-            versionName = "0.6.3"
+            versionCode = 20
+            versionName = "0.6.4"
             buildConfigField("boolean", "ONLINE_MAPS", "true")
             manifestPlaceholders["appLabel"] = "留影"
         }

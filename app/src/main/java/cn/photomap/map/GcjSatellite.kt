@@ -33,10 +33,27 @@ internal object GcjSatellite {
 
     private fun outOfChina(lat: Double, lon: Double) = lon < 72.004 || lon > 137.8347 || lat < 0.8293 || lat > 55.8271
 
-    /** Only tiles whose centre lies inside China use the domestic source. */
+    /**
+     * Checks whether any part of the tile (centre, four corners, or a ~18 km coastal buffer)
+     * touches China's land/island boundary so that coastal tiles (e.g., Sanya / Haitang Bay)
+     * never get cut in half by a single point-in-polygon check.
+     */
     fun covers(z: Int, x: Int, y: Int, china: ChinaView? = null): Boolean {
         val (lat, lon) = center(z, x, y)
-        return if (china != null) china.contains(lat, lon) else !outOfChina(lat, lon)
+        if (outOfChina(lat, lon)) return false
+        if (china == null) return true
+        if (china.contains(lat, lon)) return true
+        val (nLat, wLon) = latLon(z, x.toDouble(), y.toDouble())
+        val (sLat, eLon) = latLon(z, x + 1.0, y + 1.0)
+        val pad = 0.18
+        val lats = doubleArrayOf(lat, nLat, sLat, nLat + pad, sLat - pad)
+        val lons = doubleArrayOf(lon, wLon, eLon, wLon - pad, eLon + pad)
+        for (la in lats) {
+            for (lo in lons) {
+                if (china.contains(la, lo)) return true
+            }
+        }
+        return false
     }
 
     /**
@@ -65,12 +82,14 @@ internal object GcjSatellite {
         return String(chars)
     }
 
-    private fun center(z: Int, x: Int, y: Int): Pair<Double, Double> {
+    private fun latLon(z: Int, x: Double, y: Double): Pair<Double, Double> {
         val n = (1 shl z).toDouble()
-        val lon = (x + 0.5) / n * 360.0 - 180.0
-        val lat = Math.toDegrees(atan(sinh(PI * (1 - 2 * (y + 0.5) / n))))
+        val lon = x / n * 360.0 - 180.0
+        val lat = Math.toDegrees(atan(sinh(PI * (1 - 2 * y / n))))
         return lat to lon
     }
+
+    private fun center(z: Int, x: Int, y: Int): Pair<Double, Double> = latLon(z, x + 0.5, y + 0.5)
 
     fun wgsToGcj(lat: Double, lon: Double): Pair<Double, Double> {
         if (outOfChina(lat, lon)) return lat to lon
