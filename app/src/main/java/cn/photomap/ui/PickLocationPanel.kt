@@ -149,6 +149,14 @@ fun PickLocationPanel(
                 },
                 Modifier.fillMaxWidth(),
                 label = { Text("搜索地名或经纬度") },
+                leadingIcon = { AppIcon(AppIconType.SEARCH, tint = colors.primary, size = 18.dp) },
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { query = ""; results = emptyList(); status = ""; selectedQuery = null }) {
+                            AppIcon(AppIconType.CLOSE, tint = colors.onSurfaceVariant, size = 16.dp)
+                        }
+                    }
+                } else null,
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),

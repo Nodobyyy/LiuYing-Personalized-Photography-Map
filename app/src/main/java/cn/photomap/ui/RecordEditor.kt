@@ -40,10 +40,22 @@ class Draft(val placeId: String?, val recordId: String?, initialName: String, la
                     verticalAlignment=Alignment.CenterVertically
                 ) {
                     FrostedPanel(shape = RoundedCornerShape(20.dp), elevation = 4.dp) {
-                        TextButton(onClick=onCancel,enabled=!busy, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) { Text("取消") }
+                        TextButton(onClick=onCancel,enabled=!busy, modifier = Modifier.heightIn(min = 42.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                            AppIcon(AppIconType.ARROW_LEFT, tint = MaterialTheme.colorScheme.primary, size = 16.dp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("取消", fontWeight = FontWeight.Medium)
+                        }
                     }
-                    FrostedPanel(shape = RoundedCornerShape(20.dp), elevation = 4.dp) {
-                        TextButton(onClick=onSave,enabled=valid && !busy, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)) { Text("保存记录", fontWeight = FontWeight.SemiBold) }
+                    Button(
+                        onClick=onSave,
+                        enabled=valid && !busy,
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.heightIn(min = 42.dp),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
+                    ) {
+                        AppIcon(AppIconType.CHECK, tint = MaterialTheme.colorScheme.onPrimary, size = 16.dp)
+                        Spacer(Modifier.width(5.dp))
+                        Text("保存记录", fontWeight = FontWeight.SemiBold)
                     }
                 }
                 LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(horizontal=20.dp),verticalArrangement=Arrangement.spacedBy(16.dp),contentPadding=PaddingValues(bottom=32.dp)) {

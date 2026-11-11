@@ -53,17 +53,23 @@ fun Memories(
                 .background(Brush.verticalGradient(listOf(colors.surface, colors.surfaceVariant, colors.surface)))
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 FrostedPanel(shape = RoundedCornerShape(20.dp), elevation = 4.dp) {
-                    TextButton(onClick = onClose, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("返回", fontWeight = FontWeight.Medium)
+                    TextButton(
+                        onClick = onClose,
+                        modifier = Modifier.heightIn(min = 42.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        AppIcon(AppIconType.ARROW_LEFT, tint = colors.primary, size = 16.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text("返回", fontWeight = FontWeight.SemiBold)
                     }
                 }
                 Column {
-                    Text("忆往昔", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text("忆往昔", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text("回到 ${anniversary.format(dateFormat)} 前后", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
                 }
             }

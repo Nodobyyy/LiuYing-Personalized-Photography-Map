@@ -79,14 +79,18 @@ object OnlineMapAssets {
                 overview.satellite.getJSONObject("sources").getJSONObject("satellite-overview"))
             satellite.getJSONObject("sources").put("satellite-world", JSONObject()
                 .put("type", "raster").put("url", overview.worldSatelliteUrl).put("tileSize", 256).put("maxzoom", 2))
-            val remoteLayer = satellite.getJSONArray("layers").getJSONObject(0).put("minzoom", SATELLITE_DETAIL_ZOOM)
+            val remoteLayer = satellite.getJSONArray("layers").getJSONObject(0)
+                .put("minzoom", SATELLITE_DETAIL_ZOOM)
+                .put("paint", JSONObject().put("raster-fade-duration", 200))
             val regionalWorldLayer = JSONObject(remoteLayer.toString())
                 .put("id", "satellite-online-world").put("minzoom", WORLD_SATELLITE_TRANSITION)
                 .put("maxzoom", SATELLITE_DETAIL_ZOOM)
+                .put("paint", JSONObject().put("raster-fade-duration", 150))
             val localLayer = overview.satellite.getJSONArray("layers").getJSONObject(0)
                 .put("minzoom", WORLD_SATELLITE_TRANSITION)
-            // Retain the bundled global image underneath detailed satellite tiles.
-            // It covers the transition and regions outside the local detail pack.
+                .apply { remove("maxzoom") }
+            // Retain the bundled global and China Z0-7 overview imagery underneath detailed
+            // satellite tiles at all zoom levels so zooming never shows a blank screen while loading.
             satellite.put("layers", JSONArray()
                 .put(JSONObject("""{"id":"satellite-world","source":"satellite-world","type":"raster","paint":{"raster-fade-duration":0}}"""))
                 .put(regionalWorldLayer)
@@ -167,9 +171,9 @@ object OnlineMapAssets {
                 layers.put(outside.put("filter", filter))
             }
             layer.put("id", "embedded-$id").put("source", "overview")
-            // Keep a coarse street network visible while detailed tiles arrive.
+            // Keep a coarse street network and place/road labels visible while detailed tiles arrive (or on satellite).
             val roads = layer.optString("source-layer") == "roads"
-            val limit = if (roads) 18.0 else if (layer.getString("type") == "symbol") 11.5 else 13.0
+            val limit = if (roads) 18.0 else if (layer.getString("type") == "symbol") 17.5 else 13.0
             if (roads && layer.getString("type") == "line") {
                 layer.getJSONObject("paint").put("line-opacity", JSONArray("""["interpolate",["linear"],["zoom"],11,1,14,0.48]"""))
             }

@@ -21,6 +21,10 @@ import java.util.concurrent.atomic.AtomicInteger
 object MapNetwork {
     const val CACHE_MIB = 256L
     private const val PLANET = "https://tiles.openfreemap.org/planet"
+    private const val SATELLITE_WARMUP_1 = "https://webst01.is.autonavi.com/appmaptile?style=6&x=13&y=6&z=4"
+    private const val SATELLITE_WARMUP_2 = "https://webst02.is.autonavi.com/appmaptile?style=6&x=13&y=6&z=4"
+    /** Virtual host served on-device: WGS-84 tiles rebuilt from domestic imagery (see [GcjSatellite]). */
+    const val LOCAL_SATELLITE_HOST = "satellite.photomap.local"
     private const val INDEX_MAX_AGE_MS = 60 * 60 * 1000L
     private val calls=AtomicInteger()
     private val denied=AtomicInteger()
@@ -28,16 +32,33 @@ object MapNetwork {
     private val indexLock = Any()
     private var configured = false
     private val vectorPath = Regex("/planet/[A-Za-z0-9_-]+/[0-9]{1,2}/[0-9]+/[0-9]+[.]pbf")
-    private val satellitePath = Regex("/wmts/1[.]0[.]0/s2cloudless_3857/default/g/[0-9]+/[0-9]+/[0-9]+[.]jpg")
+    private val eoxSatellitePath = Regex("/wmts/1[.]0[.]0/s2cloudless(-2020)?_3857/default/g/[0-9]+/[0-9]+/[0-9]+[.]jpg")
+    private val arcgisSatellitePath = Regex("/ArcGIS/rest/services/World_Imagery/MapServer/tile/[0-9]{1,2}/[0-9]+/[0-9]+")
+    private val localSatellitePath = Regex("/([0-9]{1,2})/([0-9]+)/([0-9]+)[.]jpg")
+    private val autonaviHosts = setOf("webst01.is.autonavi.com", "webst02.is.autonavi.com", "webst03.is.autonavi.com", "webst04.is.autonavi.com")
+    private val autonaviQuery = Regex("style=6&x=[0-9]+&y=[0-9]+&z=[0-9]{1,2}")
+    /** Raw domestic tiles are shared by up to four corrected tiles; keep recent ones in memory. */
+    private val sourceTiles by lazy {
+        object : android.util.LruCache<String, ByteArray>(12 * 1024 * 1024) {
+            override fun sizeOf(key: String, value: ByteArray) = value.size
+        }
+    }
     fun allowed(method:String,scheme:String,host:String,path:String,hasQuery:Boolean,hasBody:Boolean):Boolean =
         (method == "GET" || method == "HEAD") && scheme=="https" && !hasBody && !hasQuery && when(host) {
             "tiles.openfreemap.org"->path=="/planet" || path.matches(vectorPath)
-            "tiles.maps.eox.at"->path.matches(satellitePath)
+            "services.arcgisonline.com", "server.arcgisonline.com" -> path.matches(arcgisSatellitePath)
+            "tiles.maps.eox.at", "a.tiles.maps.eox.at", "b.tiles.maps.eox.at", "c.tiles.maps.eox.at" -> path.matches(eoxSatellitePath)
             else->false
         }
+    /** Same policy, additionally permitting the fixed read-only AutoNavi satellite tile query. */
+    fun allowed(method:String,scheme:String,host:String,path:String,query:String?,hasBody:Boolean):Boolean =
+        if (host in autonaviHosts) (method == "GET" || method == "HEAD") && scheme == "https" && !hasBody &&
+            path == "/appmaptile" && query?.matches(autonaviQuery) == true
+        else allowed(method, scheme, host, path, query != null, hasBody)
     @Synchronized
-    fun configure(context: Context) {
+    fun configure(context: Context, china: ChinaView? = null) {
         if (configured) return
+        val chinaBoundary = china ?: runCatching { ChinaView(context) }.getOrNull()
         val index = context.getSharedPreferences("online-tile-index", Context.MODE_PRIVATE)
         val metadataCache = okhttp3.Interceptor { chain ->
             val request = chain.request()
@@ -73,26 +94,81 @@ object MapNetwork {
             }
         }
         val check=okhttp3.Interceptor {chain->val r=chain.request();val u=r.url
-            if(!allowed(r.method,u.scheme,u.host,u.encodedPath,u.query!=null,r.body!=null)){denied.incrementAndGet();throw IOException("Only approved map GET/HEAD requests are permitted")}
+            if(!allowed(r.method,u.scheme,u.host,u.encodedPath,u.encodedQuery,r.body!=null)){denied.incrementAndGet();throw IOException("Only approved map GET/HEAD requests are permitted")}
             calls.incrementAndGet()
-            if (u.encodedPath != "/planet") tileCalls.incrementAndGet()
+            if (r.method == "GET" && u.encodedPath != "/planet") tileCalls.incrementAndGet()
             chain.proceed(r)
         }
-        val client = OkHttpClient.Builder()
-            // Avoid having too many tile transfers compete on a slow connection.
-            .dispatcher(Dispatcher().apply { maxRequestsPerHost = 6 })
-            .connectTimeout(6, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .addInterceptor(metadataCache)
+        // Raw client: its own dispatcher so nested source-tile downloads can never starve
+        // the dispatcher that MapLibre's outer tile requests are waiting on.
+        val raw = OkHttpClient.Builder()
+            .dispatcher(Dispatcher().apply { maxRequests = 64; maxRequestsPerHost = 16 })
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
             .addNetworkInterceptor(check)
+            .build()
+        fun fetchSources(tiles: List<GcjSatellite.Tile>): List<ByteArray>? {
+            val results = arrayOfNulls<ByteArray>(tiles.size)
+            val pending = java.util.concurrent.CountDownLatch(tiles.size)
+            tiles.forEachIndexed { index, tile ->
+                val key = "${tile.z}/${tile.x}/${tile.y}"
+                val cached = sourceTiles.get(key)
+                if (cached != null) { results[index] = cached; pending.countDown(); return@forEachIndexed }
+                val host = "webst0${(tile.x + tile.y) % 4 + 1}.is.autonavi.com"
+                val url = "https://$host/appmaptile?style=6&x=${tile.x}&y=${tile.y}&z=${tile.z}"
+                raw.newCall(Request.Builder().url(url).build()).enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, error: IOException) = pending.countDown()
+                    override fun onResponse(call: okhttp3.Call, response: Response) {
+                        try {
+                            val bytes = response.use { if (it.isSuccessful) it.body?.bytes() else null }
+                            if (GcjSatellite.isValidImagery(bytes)) { sourceTiles.put(key, bytes!!); results[index] = bytes }
+                        } catch (_: IOException) {
+                        } finally { pending.countDown() }
+                    }
+                })
+            }
+            if (!pending.await(15, TimeUnit.SECONDS)) return null
+            return results.toList().takeIf { list -> list.all { it != null } }?.map { it!! }
+        }
+        val satellite = okhttp3.Interceptor { chain ->
+            val request = chain.request()
+            if (request.url.host != LOCAL_SATELLITE_HOST) return@Interceptor chain.proceed(request)
+            val match = localSatellitePath.matchEntire(request.url.encodedPath)
+                ?: throw IOException("Invalid satellite tile")
+            val (z, x, y) = match.destructured.toList().map { it.toInt() }
+            val corrected = if (GcjSatellite.covers(z, x, y, chinaBoundary)) {
+                try { GcjSatellite.build(z, x, y, ::fetchSources) } catch (_: RuntimeException) { null }
+            } else null
+            if (corrected != null) {
+                Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .header("Cache-Control", "max-age=2592000")
+                    .body(corrected.toResponseBody("image/jpeg".toMediaType())).build()
+            } else {
+                // Outside mainland China (or if the domestic source fails) use global WGS-84 imagery.
+                chain.proceed(request.newBuilder()
+                    .url("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x").build())
+            }
+        }
+        val client = raw.newBuilder()
+            // Allow higher HTTP/2 tile concurrency per host while keeping total queue responsive.
+            .dispatcher(Dispatcher().apply { maxRequests = 48; maxRequestsPerHost = 24 })
+            .readTimeout(20, TimeUnit.SECONDS)
+            .addInterceptor(satellite)
+            .addInterceptor(metadataCache)
             .build()
         HttpRequestUtil.setPrintRequestUrlOnFailure(false)
         HttpRequestUtil.setOkHttpClient(client)
         configured = true
-        if (connected(context)) client.newCall(Request.Builder().url(PLANET).build()).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, error: IOException) = Unit
-            override fun onResponse(call: okhttp3.Call, response: Response) = response.close()
-        })
+        if (connected(context)) {
+            val noop = object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, error: IOException) = Unit
+                override fun onResponse(call: okhttp3.Call, response: Response) = response.close()
+            }
+            client.newCall(Request.Builder().url(PLANET).build()).enqueue(noop)
+            // Pre-warm DNS + TLS to the domestic satellite hosts using HEAD so tileCalls is untouched.
+            client.newCall(Request.Builder().head().url(SATELLITE_WARMUP_1).build()).enqueue(noop)
+            client.newCall(Request.Builder().head().url(SATELLITE_WARMUP_2).build()).enqueue(noop)
+        }
     }
     private fun validTileIndex(text: String): Boolean = runCatching {
         val tiles = JSONObject(text).getJSONArray("tiles")

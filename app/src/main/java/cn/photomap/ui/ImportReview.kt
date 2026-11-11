@@ -75,14 +75,21 @@ fun ImportReview(
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     FrostedPanel(shape = RoundedCornerShape(20.dp), elevation = 4.dp) {
-                        TextButton(onClick = onDismiss, enabled = !busy, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-                            Text("返回", fontWeight = FontWeight.Medium)
+                        TextButton(
+                            onClick = onDismiss,
+                            enabled = !busy,
+                            modifier = Modifier.heightIn(min = 42.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            AppIcon(AppIconType.ARROW_LEFT, tint = colors.primary, size = 16.dp)
+                            Spacer(Modifier.width(4.dp))
+                            Text("返回", fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    Text("补填导入信息", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text("补填导入信息", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 16.dp),

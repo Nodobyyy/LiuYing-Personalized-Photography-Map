@@ -73,16 +73,18 @@ fun DetailMenu(label: String, enabled: Boolean, options: @Composable ColumnScope
     val close = { expanded = false }
     val interactionSource = remember { MutableInteractionSource() }
     Box {
-        TextButton(
+        FilledTonalButton(
             onClick = { expanded = true },
             enabled = enabled,
             interactionSource = interactionSource,
-            modifier = Modifier.liquidPress(interactionSource, 0.95f)
-        ) { Text(label) }
+            modifier = Modifier.heightIn(min = 38.dp).liquidPress(interactionSource, 0.95f),
+            shape = RoundedCornerShape(16.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+        ) { Text(label, style = MaterialTheme.typography.labelLarge) }
         DropdownMenu(
             expanded, onDismissRequest = close,
             shape = RoundedCornerShape(22.dp),
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .94f),
+            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = .96f),
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
         ) {
@@ -94,7 +96,7 @@ fun DetailMenu(label: String, enabled: Boolean, options: @Composable ColumnScope
 /**
  * Liquid Glass / Frosted Panel:
  * Combines hardware-accelerated RenderEffect blur (API 31+) with multi-stop refractive
- * specular highlights, translucent surface tinting, and a directional rim border.
+ * specular highlights, high-legibility translucent surface tinting, and a directional rim border.
  */
 @Composable
 fun FrostedPanel(
@@ -109,34 +111,35 @@ fun FrostedPanel(
     val borderBrush = remember(isDark, colors.outlineVariant, colors.primary) {
         Brush.linearGradient(
             colors = if (isDark) listOf(
-                Color.White.copy(alpha = 0.28f),
+                Color.White.copy(alpha = 0.26f),
                 colors.primary.copy(alpha = 0.16f),
-                colors.outlineVariant.copy(alpha = 0.18f),
+                colors.outlineVariant.copy(alpha = 0.20f),
                 Color.White.copy(alpha = 0.08f)
             ) else listOf(
-                Color.White.copy(alpha = 0.88f),
+                Color.White.copy(alpha = 0.92f),
                 colors.primary.copy(alpha = 0.18f),
-                colors.outlineVariant.copy(alpha = 0.35f),
-                Color.White.copy(alpha = 0.55f)
+                colors.outlineVariant.copy(alpha = 0.40f),
+                Color.White.copy(alpha = 0.65f)
             ),
             start = Offset(0f, 0f),
             end = Offset(700f, 700f)
         )
     }
-    val surfaceBrush = remember(isDark, colors.surface, colors.surfaceVariant, colors.primary, tintColor) {
-        val baseTop = if (tintColor != Color.Unspecified) tintColor else colors.surface.copy(alpha = if (isDark) 0.80f else 0.85f)
-        val baseBottom = colors.surfaceVariant.copy(alpha = if (isDark) 0.74f else 0.78f)
+    val surfaceBrush = remember(isDark, colors.surface, colors.surfaceVariant, tintColor) {
+        val baseTop = if (tintColor != Color.Unspecified) tintColor else colors.surface.copy(alpha = if (isDark) 0.86f else 0.90f)
+        val baseBottom = if (tintColor != Color.Unspecified) tintColor.copy(alpha = (tintColor.alpha * 0.92f).coerceIn(0f, 1f))
+            else colors.surfaceVariant.copy(alpha = if (isDark) 0.82f else 0.86f)
         Brush.verticalGradient(listOf(baseTop, baseBottom))
     }
     val specularBrush = remember(isDark, colors.primary) {
         Brush.linearGradient(
             colors = if (isDark) listOf(
-                Color.White.copy(alpha = 0.10f),
-                colors.primary.copy(alpha = 0.05f),
+                Color.White.copy(alpha = 0.09f),
+                colors.primary.copy(alpha = 0.04f),
                 Color.Transparent
             ) else listOf(
-                Color.White.copy(alpha = 0.52f),
-                colors.primary.copy(alpha = 0.06f),
+                Color.White.copy(alpha = 0.55f),
+                colors.primary.copy(alpha = 0.05f),
                 Color.Transparent
             ),
             start = Offset(0f, 0f),
@@ -150,7 +153,7 @@ fun FrostedPanel(
                     elevation = elevation,
                     shape = shape,
                     ambientColor = Color.Black.copy(alpha = if (isDark) 0.45f else 0.16f),
-                    spotColor = Color.Black.copy(alpha = if (isDark) 0.5f else 0.2f)
+                    spotColor = Color.Black.copy(alpha = if (isDark) 0.50f else 0.22f)
                 ) else Modifier
             )
             .clip(shape)
@@ -165,7 +168,9 @@ fun FrostedPanel(
         }
         Box(Modifier.matchParentSize().background(surfaceBrush))
         Box(Modifier.matchParentSize().background(specularBrush))
-        content()
+        CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
+            content()
+        }
     }
 }
 
@@ -187,18 +192,18 @@ fun LiquidGlassCard(
         if (selected) {
             Brush.linearGradient(
                 listOf(
-                    colors.primary.copy(alpha = 0.85f),
-                    colors.primary.copy(alpha = 0.45f)
+                    colors.primary.copy(alpha = 0.90f),
+                    colors.primary.copy(alpha = 0.50f)
                 )
             )
         } else {
             Brush.linearGradient(
                 if (isDark) listOf(
                     Color.White.copy(alpha = 0.20f),
-                    colors.outlineVariant.copy(alpha = 0.22f)
+                    colors.outlineVariant.copy(alpha = 0.25f)
                 ) else listOf(
-                    Color.White.copy(alpha = 0.78f),
-                    colors.outlineVariant.copy(alpha = 0.35f)
+                    Color.White.copy(alpha = 0.85f),
+                    colors.outlineVariant.copy(alpha = 0.42f)
                 )
             )
         }
@@ -207,15 +212,15 @@ fun LiquidGlassCard(
         if (selected) {
             Brush.verticalGradient(
                 listOf(
-                    colors.primaryContainer.copy(alpha = if (isDark) 0.58f else 0.68f),
-                    colors.surface.copy(alpha = if (isDark) 0.72f else 0.82f)
+                    colors.primaryContainer.copy(alpha = if (isDark) 0.65f else 0.78f),
+                    colors.surface.copy(alpha = if (isDark) 0.80f else 0.90f)
                 )
             )
         } else {
             Brush.verticalGradient(
                 listOf(
-                    colors.surface.copy(alpha = if (isDark) 0.65f else 0.74f),
-                    colors.surfaceVariant.copy(alpha = if (isDark) 0.52f else 0.62f)
+                    colors.surface.copy(alpha = if (isDark) 0.75f else 0.85f),
+                    colors.surfaceVariant.copy(alpha = if (isDark) 0.62f else 0.72f)
                 )
             )
         }
@@ -233,7 +238,11 @@ fun LiquidGlassCard(
             .background(bgBrush)
             .border(if (selected) 1.5.dp else 1.dp, borderBrush, shape)
     }
-    Column(baseModifier, content = content)
+    Column(baseModifier) {
+        CompositionLocalProvider(LocalContentColor provides colors.onSurface) {
+            content()
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -245,29 +254,37 @@ fun MapPanelSheet(
     content: @Composable ColumnScope.() -> Unit
 ) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = skipPartiallyExpanded)
+    val sheetShape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
     if (opaque) {
-        ModalBottomSheet(onDismissRequest, sheetState = state, containerColor = MaterialTheme.colorScheme.surface, content = content)
+        ModalBottomSheet(
+            onDismissRequest,
+            sheetState = state,
+            shape = sheetShape,
+            containerColor = MaterialTheme.colorScheme.surface,
+            scrimColor = Color.Black.copy(alpha = 0.36f),
+            content = content
+        )
         return
     }
     ModalBottomSheet(
         onDismissRequest,
         sheetState = state,
         containerColor = Color.Transparent,
-        scrimColor = Color.Black.copy(alpha = 0.28f),
+        scrimColor = Color.Black.copy(alpha = 0.34f),
         dragHandle = null
     ) {
         FrostedPanel(
             Modifier.fillMaxWidth(),
-            RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-            elevation = 12.dp
+            sheetShape,
+            elevation = 14.dp
         ) {
             Column(Modifier.fillMaxWidth()) {
-                Box(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 6.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), contentAlignment = Alignment.Center) {
                     Box(
                         Modifier
-                            .size(width = 40.dp, height = 4.5.dp)
+                            .size(width = 42.dp, height = 4.5.dp)
                             .clip(RoundedCornerShape(50))
-                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f))
+                            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.40f))
                     )
                 }
                 content()
@@ -275,4 +292,3 @@ fun MapPanelSheet(
         }
     }
 }
-

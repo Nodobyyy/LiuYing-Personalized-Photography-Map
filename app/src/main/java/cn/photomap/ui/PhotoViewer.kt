@@ -43,16 +43,20 @@ data class ViewedPhoto(val photo: Photo, val record: Record)
         Column(Modifier.fillMaxSize().background(Color.Black).systemBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal=14.dp, vertical=8.dp),horizontalArrangement=Arrangement.SpaceBetween,verticalAlignment=Alignment.CenterVertically) {
                 FrostedPanel(shape = pill, elevation = 4.dp) {
-                    TextButton(onClick=onClose, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("返回",color=Color.White, fontWeight = FontWeight.Medium)
+                    TextButton(onClick=onClose, modifier = Modifier.heightIn(min = 42.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                        AppIcon(AppIconType.ARROW_LEFT, tint = Color.White, size = 16.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text("返回",color=Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
                 FrostedPanel(shape = pill, elevation = 4.dp) {
-                    Text("${pager.currentPage+1} / ${entries.size}", color=Color.White, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.labelLarge)
+                    Text("${pager.currentPage+1} / ${entries.size}", color=Color.White, modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                 }
                 FrostedPanel(shape = pill, elevation = 4.dp) {
-                    TextButton(onClick={info=!info}, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
-                        Text("信息",color=Color.White, fontWeight = FontWeight.Medium)
+                    TextButton(onClick={info=!info}, modifier = Modifier.heightIn(min = 42.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)) {
+                        AppIcon(AppIconType.INFO, tint = Color.White, size = 16.dp)
+                        Spacer(Modifier.width(4.dp))
+                        Text("信息",color=Color.White, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

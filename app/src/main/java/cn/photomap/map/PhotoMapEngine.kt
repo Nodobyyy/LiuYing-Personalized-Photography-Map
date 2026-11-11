@@ -81,7 +81,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     val center: LatLng get()=(map?.cameraPosition?.target ?: LatLng(35.0,105.0)).let { if (BuildConfig.ONLINE_MAPS) it.wrap() else it }
     init {
         MapLibre.getInstance(context)
-        if (BuildConfig.ONLINE_MAPS) MapNetwork.configure(context)
+        if (BuildConfig.ONLINE_MAPS) MapNetwork.configure(context, china)
         val options = MapLibreMapOptions.createFromAttributes(context)
             .localIdeographFontFamilyEnabled(true).localIdeographFontFamily("sans-serif")
         // The transparent texture lets the globe show behind native map labels and markers.
@@ -281,18 +281,32 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             }
         }
         if(basemapMode==BasemapMode.SATELLITE) {
+            // In online mode, remove the overseas OpenFreeMap vector source ("base") when viewing satellite imagery
+            // so that MapLibre never wastes bandwidth or connections fetching slow foreign vector tiles.
+            // Bundled offline PMTiles ("overview" & "context*") provide instant local roads and place labels!
+            if (BuildConfig.ONLINE_MAPS && hasOnlineOverview) {
+                json.optJSONObject("sources")?.remove("base")
+            }
             val layers=json.getJSONArray("layers")
+            val retainedLayers = org.json.JSONArray()
             for(i in 0 until layers.length()) {
-                val layer=layers.getJSONObject(i);val paint=layer.optJSONObject("paint") ?: continue
-                if(layer.optString("id")=="china-display-mask") paint.put("fill-color","#19303d")
-                if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.0)
+                val layer=layers.getJSONObject(i)
                 val source = layer.optString("source")
+                if (BuildConfig.ONLINE_MAPS && hasOnlineOverview && source == "base") continue
+                val paint=layer.optJSONObject("paint")
+                if (paint != null) {
+                    if(layer.optString("id")=="china-display-mask") paint.put("fill-color","#19303d")
+                    if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.0)
+                    if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
+                }
                 val vectorSource = source == "base" || (BuildConfig.ONLINE_MAPS && (source == "overview" || source.startsWith("context")))
                 if(!satelliteLabels && (layer.optString("type")=="symbol" || vectorSource)) layer.put("layout",(layer.optJSONObject("layout")?:JSONObject()).put("visibility","none"))
-                if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
+                retainedLayers.put(layer)
             }
+            json.put("layers", retainedLayers)
         }
         val isSatellite = basemapMode == BasemapMode.SATELLITE
+        if (BuildConfig.ONLINE_MAPS) ready.setPrefetchZoomDelta(if (isSatellite) 0 else 4)
         val borderColor = Color.parseColor(OnlineBoundaries.color(dark, isSatellite))
         val globeOverview = if (BuildConfig.ONLINE_MAPS && bundle != null) {
             OnlineBoundaries.apply(json, dark, isSatellite)
@@ -318,7 +332,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
                 val worldZoom = json.optJSONObject("sources")?.optJSONObject("context-detail")?.optInt("maxzoom") ?: 0
                 val overview = if (hasOnlineOverview) "内置全球道路 Z$worldZoom、中国街道 Z10 和卫星 Z7 · " else ""
-                "${overview}OpenFreeMap 在线街道 · EOX 2016 卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
+                "${overview}OpenFreeMap 在线街道 · 高德/Esri 卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
             } else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
             if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(overviewCamera())}}
             refresh();refreshPickHint();refreshMapInfo();chooseMap()
@@ -417,8 +431,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 !MapNetwork.connected(context) && hasOnlineOverview -> "无网络 · 显示内置地图和已缓存细节"
                 !MapNetwork.connected(context) -> "无网络 · 显示已缓存的地图"
                 basemapMode==BasemapMode.SATELLITE && hasOnlineOverview && zoom<OnlineMapAssets.SATELLITE_DETAIL_ZOOM ->
-                    "内置卫星概览 · 2016 年"
-                basemapMode==BasemapMode.SATELLITE -> "卫星影像 · 2016 年 · 约 10 米"
+                    "内置卫星概览 · 放大自动加载高清卫星"
+                basemapMode==BasemapMode.SATELLITE -> "高清卫星影像 · 国内直连"
                 else -> ""
             }
             onMapInfo(info)
