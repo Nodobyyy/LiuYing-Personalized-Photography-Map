@@ -50,6 +50,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private val appearancePrefs=context.getSharedPreferences("settings",Context.MODE_PRIVATE)
     var basemapMode=runCatching {BasemapMode.valueOf(appearancePrefs.getString("basemap","STREETS")!!)}.getOrDefault(BasemapMode.STREETS);private set
     var satelliteLabels=appearancePrefs.getBoolean("satellite-labels",false);private set
+    var solarTerminator=appearancePrefs.getBoolean("solar-terminator",true);private set
+    private val bitmapCache=mutableMapOf<String,Bitmap>()
     private var regional=emptyList<RegionalMap>()
     private val loadedPackages=mutableMapOf<String,LocalMapBundle.Loaded>()
     private val china=ChinaView(context)
@@ -191,6 +193,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     fun update(places: List<Place>, selected: String?) { items=places; selection=selected; revision++; refresh() }
     fun basemap(mode: BasemapMode) {if(basemapMode!=mode) {basemapMode=mode;appearancePrefs.edit().putString("basemap",mode.name).apply();selectedMap="";chooseMap(true);refreshMapInfo()}}
     fun satelliteLabels(show:Boolean) {if(satelliteLabels!=show){satelliteLabels=show;appearancePrefs.edit().putBoolean("satellite-labels",show).apply();selectedMap="";chooseMap(true)}}
+    fun solarTerminator(show:Boolean) {if(solarTerminator!=show){solarTerminator=show;appearancePrefs.edit().putBoolean("solar-terminator",show).apply();globeBackdrop?.setSolarTerminator(show)}}
     fun theme(isDark: Boolean) { if(dark!=isDark) { dark=isDark; selectedMap=""; chooseMap(force=true) } }
     fun reloadPackages() { scope.launch { regional=withContext(Dispatchers.IO) { packages.list() };loadedPackages.clear(); selectedMap=""; chooseMap(true) } }
     private fun nationalCamera()=CameraUpdateFactory.newLatLngBounds(LatLngBounds.Builder().include(LatLng(54.0,136.0)).include(LatLng(3.0,73.0)).build(),36)
@@ -316,10 +319,14 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             style=loaded; applying=false
             if (globeOverview != null) scope.launch {
                 val (bitmap, borders) = withContext(Dispatchers.IO) {
-                    context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) } to
-                        runCatching { globeBorders }.getOrNull()
+                    val bmp = synchronized(bitmapCache) {
+                        bitmapCache[globeOverview] ?: context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) }?.also {
+                            bitmapCache[globeOverview] = it
+                        }
+                    }
+                    bmp to runCatching { globeBorders }.getOrNull()
                 }
-                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite, dark, borders, borderColor)
+                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite, dark, solarTerminator, borders, borderColor)
             }
             loaded.addSource(GeoJsonSource("user-photos",FeatureCollection.fromFeatures(emptyArray<Feature>())))
             val density=context.resources.displayMetrics.density

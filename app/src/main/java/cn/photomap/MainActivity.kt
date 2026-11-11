@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var mapOptions by mutableStateOf(false)
     private var basemapMode by mutableStateOf(BasemapMode.STREETS)
     private var satelliteLabels by mutableStateOf(false)
+    private var solarTerminator by mutableStateOf(true)
     private val diagnostics get()=(application as PhotoMapApplication).startupDiagnostics
     private var startupError by mutableStateOf(false)
     private var diagnosticMessage by mutableStateOf("")
@@ -125,6 +126,7 @@ class MainActivity : ComponentActivity() {
             engine=PhotoMapEngine(this,lifecycleScope,library,packages,{members->if(members.size==1) select(members.first()) else overlapping=members},{mapStatus=it},{hint,allowed->pickHint=hint;pickAllowed=allowed},{mapInfo=it})
             basemapMode=engine.basemapMode
             satelliteLabels=engine.satelliteLabels
+            solarTerminator=engine.solarTerminator
             engine.create(saved)
             startupError=false
         } catch(error: Exception) {diagnostics.record(error);startupError=true;if(::engine.isInitialized) runCatching {engine.destroy()}}
@@ -616,6 +618,25 @@ class MainActivity : ComponentActivity() {
                 Switch(
                     checked=satelliteLabels,
                     onCheckedChange={satelliteLabels=it;engine.satelliteLabels(it)},
+                    colors=SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primary,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                )
+            }
+        }
+        if(BuildConfig.ONLINE_MAPS) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("实时地球昼夜晨昏线",style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
+                    Text("根据当前时间与太阳直射点，实时渲染地球向阳面与夜半球",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.width(8.dp))
+                Switch(
+                    checked=solarTerminator,
+                    onCheckedChange={solarTerminator=it;engine.solarTerminator(it)},
                     colors=SwitchDefaults.colors(
                         checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
                         checkedTrackColor = MaterialTheme.colorScheme.primary,
