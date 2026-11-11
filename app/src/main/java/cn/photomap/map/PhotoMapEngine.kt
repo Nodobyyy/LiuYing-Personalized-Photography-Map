@@ -65,6 +65,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     private var revision=0
     private var fitFirstView=false
     private var globeSpin: GlobeSpin? = null
+    private var searchSelection: Pair<LatLng, String>? = null
     var suggestedName="";private set
     private fun inCoverage(latitude: Double, longitude: Double) =
         cn.photomap.data.PhotoPoint(latitude, longitude).inCoverage
@@ -72,7 +73,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     var picking=false
         set(value) {
             field=value
-            if (value) stopGlobeSpin()
+            if (value) stopGlobeSpin() else searchSelection = null
             style?.getLayer("user-photo-covers")?.setProperties(visibility(if(value) Property.NONE else Property.VISIBLE))
             if(value) refreshPickHint() else refresh()
         }
@@ -195,10 +196,12 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     fun snapshot(onReady: (android.graphics.Bitmap) -> Unit) {
         map?.snapshot { bitmap -> onReady(bitmap) }
     }
-    fun focusSearch(latitude: Double, longitude: Double) {
+    fun focusSearch(latitude: Double, longitude: Double, label: String) {
         stopGlobeSpin()
-        map?.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(latitude, longitude), 15.0))
-        refreshPickHint()
+        val target = LatLng(latitude, longitude)
+        searchSelection = target to label
+        map?.moveCamera(CameraUpdateFactory.newLatLngZoom(target, 15.0))
+        showPickHint(target, label)
     }
     fun focus(latitude: Double, longitude: Double) {
         stopGlobeSpin()
@@ -365,12 +368,26 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val ready=map ?: return;val target=center
         val allowed=inCoverage(target.latitude,target.longitude)
         if(!allowed) {suggestedName="";onPickContext("当前位置超出地图数据范围",false);return}
+        searchSelection?.let { (selected, label) ->
+            // A search already resolved this point. Querying native features
+            // immediately after a large jump can block while tiles render.
+            if (selected.distanceTo(target) <= 80) {
+                showPickHint(target, label)
+                return
+            }
+        }
         val anchor=ready.projection.toScreenLocation(target);val radius=24*context.resources.displayMetrics.density
         val names=listOf("urban-poi-labels","urban-road-labels","urban-roads","poi-labels","road-labels","roads","county-labels","place-labels","locality-labels")
         val layers=(if (hasOnlineOverview) names + names.map { "embedded-$it" } +
             names.map { "context-$it" } + names.map { "context-detail-$it" } else names).filter {style?.getLayer(it)!=null}.toTypedArray()
         val features=if(layers.isEmpty()) emptyList() else ready.queryRenderedFeatures(RectF(anchor.x-radius,anchor.y-radius,anchor.x+radius,anchor.y+radius),*layers)
-        suggestedName=features.firstNotNullOfOrNull {feature->listOf("name:zh-Hans","name:zh","name","name:en").firstNotNullOfOrNull {key->runCatching {feature.getStringProperty(key)}.getOrNull()?.takeIf {it.isNotBlank()}}} ?: ""
+        val name=features.firstNotNullOfOrNull {feature->listOf("name:zh-Hans","name:zh","name","name:en").firstNotNullOfOrNull {key->runCatching {feature.getStringProperty(key)}.getOrNull()?.takeIf {it.isNotBlank()}}}.orEmpty()
+        showPickHint(target, name)
+    }
+
+    private fun showPickHint(target: LatLng, name: String) {
+        val ready = map ?: return
+        suggestedName = name
         val coordinates="%.6f, %.6f".format(target.latitude,target.longitude)
         val detail=if(BuildConfig.ONLINE_MAPS) {if(basemapMode==BasemapMode.SATELLITE) "\n2016 年卫星影像；精细选点可切换街道图" else ""} else if(basemapMode==BasemapMode.SATELLITE) "\n"+if(fineSatelliteLoaded && urban.contains(target.latitude,target.longitude)) "2016 年城区影像；精细选点可切换街道图" else "当前为概览影像，精细选点请切换街道图" else if(selectedMap=="base" && ready.cameraPosition.zoom>10) "\n尚未导入精细包，当前为概览图" else ""
         onPickContext((if(suggestedName.isBlank()) coordinates else "附近：$suggestedName\n$coordinates")+detail,true)

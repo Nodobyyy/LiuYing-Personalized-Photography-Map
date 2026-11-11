@@ -299,7 +299,7 @@ class MainActivity : ComponentActivity() {
                             Modifier.align(Alignment.TopCenter).padding(12.dp).widthIn(max = 480.dp).fillMaxWidth(),
                             original = photo?.let { library.file(it.original) }) { latitude, longitude, label ->
                             searchedPlace = PhotoPoint(latitude, longitude) to label
-                            engine.focusSearch(latitude, longitude)
+                            engine.focusSearch(latitude, longitude, label)
                         }
                     }
                     Box(
