@@ -193,6 +193,27 @@ class NativeOnlineOverviewTest {
                         }
                     }
                     SystemClock.sleep(400)
+                    var borderPoint = android.graphics.PointF()
+                    scenario.onActivity {
+                        borderPoint = map(it)!!.projection.toScreenLocation(LatLng(27.0449, 98.7165))
+                        val offset = IntArray(2)
+                        engine(it).view.getLocationOnScreen(offset)
+                        borderPoint.offset(offset[0].toFloat(), offset[1].toFloat())
+                    }
+                    val frame = instrumentation.uiAutomation.takeScreenshot()
+                    try {
+                        val hasBoundary = (-5..5).any { dx ->
+                            (-5..5).any { dy ->
+                                val color = frame.getPixel(borderPoint.x.toInt() + dx, borderPoint.y.toInt() + dy)
+                                android.graphics.Color.red(color) in 105..190 &&
+                                    android.graphics.Color.green(color) in 110..195
+                            }
+                        }
+                        assertTrue("The boundary must draw in the correct place at zoom $zoom", hasBoundary)
+                        assertTrue("The map must fill the viewport near the projection handoff", globeWidth() > frame.width * .95)
+                    } finally {
+                        frame.recycle()
+                    }
                     screenshot("online056-yunnan-$zoom")
                 }
                 for ((name, location) in listOf("Paris" to LatLng(48.8566, 2.3522),

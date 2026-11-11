@@ -58,7 +58,12 @@ object OnlineMapAssets {
         }
         val style=JSONObject(context.assets.open("maps/style-online.json").bufferedReader().use {it.readText()})
         style.put("glyphs","file://${root.absolutePath}/fonts/{fontstack}/{range}.pbf")
-        style.put("projection", JSONObject().put("type", "globe"))
+        // Hand off at the point where the globe already fills the viewport.
+        // Keeping the experimental globe tile renderer at regional zoom can
+        // clip entire tiles and stack labels in a corner.
+        style.put("projection", JSONObject().put("type", JSONArray(
+            """["step",["zoom"],"vertical-perspective",$GLOBE_TILE_ZOOM,"mercator"]"""
+        )))
         val satellite = readStyle(context, "maps/satellite-online.json")
         val overview = try {
             prepareOverview(context)
