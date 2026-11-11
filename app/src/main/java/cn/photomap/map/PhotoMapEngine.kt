@@ -90,7 +90,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         view.setBackgroundColor(if (BuildConfig.ONLINE_MAPS) Color.TRANSPARENT else Color.rgb(233,236,231))
         mapContainer = FrameLayout(context).apply {
             if (globeBackdrop != null) {
-                setBackgroundColor(Color.BLACK)
+                setBackgroundColor(Color.rgb(4, 10, 22))
                 addView(globeBackdrop)
             }
             addView(view)
@@ -268,11 +268,11 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                     if(property.endsWith("color") && value is String && value.startsWith('#')) runCatching {
                         val hsv=FloatArray(3); Color.colorToHSV(Color.parseColor(value),hsv); hsv[1]*=0.45f; hsv[2]=0.12f+(1-hsv[2])*0.55f
                         val color=when(property) {
-                            "background-color"->"#172a32"
-                            "text-color"->"#d7e2da"
-                            "text-halo-color"->"#1d2922"
-                            "line-color"->when(layer.optString("source-layer")) {"roads"->"#5d7465";"boundaries"->"#8a9a8f";else->"#%06x".format(Color.HSVToColor(hsv) and 0xffffff)}
-                            "fill-color"->if(layer.optString("id")=="china-display-mask") "#172a32" else when(layer.optString("source-layer")) {"water"->"#172f3b";"earth"->"#202d25";"landcover","landuse"->"#2b3b2e";else->"#%06x".format(Color.HSVToColor(hsv) and 0xffffff)}
+                            "background-color"->"#0a1929"
+                            "text-color"->"#d9e9f2"
+                            "text-halo-color"->"#0c1b29"
+                            "line-color"->when(layer.optString("source-layer")) {"roads"->"#3b5d6e";"boundaries"->"#688d9e";else->"#%06x".format(Color.HSVToColor(hsv) and 0xffffff)}
+                            "fill-color"->if(layer.optString("id")=="china-display-mask") "#0a1929" else when(layer.optString("source-layer")) {"water"->"#0a1929";"earth"->"#182c36";"landcover","landuse"->"#1d343e";else->"#%06x".format(Color.HSVToColor(hsv) and 0xffffff)}
                             else->"#%06x".format(Color.HSVToColor(hsv) and 0xffffff)
                         }
                         paint.put(property,color)
@@ -319,7 +319,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                     context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) } to
                         runCatching { globeBorders }.getOrNull()
                 }
-                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite, borders, borderColor)
+                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite, dark, borders, borderColor)
             }
             loaded.addSource(GeoJsonSource("user-photos",FeatureCollection.fromFeatures(emptyArray<Feature>())))
             val density=context.resources.displayMetrics.density

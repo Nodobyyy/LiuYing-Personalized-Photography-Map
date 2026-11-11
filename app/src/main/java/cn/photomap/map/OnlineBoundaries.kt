@@ -5,7 +5,7 @@ import org.json.JSONObject
 
 internal object OnlineBoundaries {
     fun color(dark: Boolean, satellite: Boolean) =
-        if (satellite) "#f7f0da" else if (dark) "#9eaaa0" else "#787f72"
+        if (satellite) "#f7f0da" else if (dark) "#7ca3b5" else "#787f72"
 
     fun apply(style: JSONObject, dark: Boolean, satellite: Boolean) {
         val sources = style.getJSONObject("sources")

@@ -145,7 +145,7 @@ function Draw-Polygons($graphics, $rings, $color) {
 
 foreach ($theme in @(
     @{ Name='day'; Land='#efeee7'; Water='#a9d4e9' },
-    @{ Name='night'; Land='#202d25'; Water='#172f3b' }
+    @{ Name='night'; Land='#182c36'; Water='#0a1929' }
 )) {
     $bitmap = [Drawing.Bitmap]::new($size, $size)
     $graphics = [Drawing.Graphics]::FromImage($bitmap)

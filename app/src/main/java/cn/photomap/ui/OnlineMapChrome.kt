@@ -235,14 +235,14 @@ fun OnlineMapChrome(
                         enabled = enabled,
                         interactionSource = memBtnInteraction,
                         modifier = Modifier
-                            .weight(0.92f)
+                            .weight(0.84f)
                             .heightIn(min = 48.dp)
                             .liquidPress(memBtnInteraction, 0.95f),
                         shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 10.dp)
                     ) {
-                        AppIcon(AppIconType.HISTORY, tint = colors.primary, size = 16.dp)
-                        Spacer(Modifier.width(4.dp))
+                        AppIcon(AppIconType.HISTORY, tint = colors.primary, size = 15.dp)
+                        Spacer(Modifier.width(3.dp))
                         Text("忆往昔", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                     }
                     Box(
@@ -256,14 +256,14 @@ fun OnlineMapChrome(
                         enabled = enabled,
                         interactionSource = pickBtnInteraction,
                         modifier = Modifier
-                            .weight(1.08f)
+                            .weight(1.16f)
                             .heightIn(min = 48.dp)
                             .liquidPress(pickBtnInteraction, 0.95f),
                         shape = RoundedCornerShape(20.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
                     ) {
-                        AppIcon(AppIconType.CROSSHAIR, tint = colors.primary, size = 16.dp)
-                        Spacer(Modifier.width(4.dp))
+                        AppIcon(AppIconType.CROSSHAIR, tint = colors.primary, size = 15.dp)
+                        Spacer(Modifier.width(3.dp))
                         Text("地图选点", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, maxLines = 1, softWrap = false)
                     }
                     Button(
@@ -271,15 +271,15 @@ fun OnlineMapChrome(
                         enabled = enabled,
                         interactionSource = importBtnInteraction,
                         modifier = Modifier
-                            .weight(1.12f)
+                            .weight(1.06f)
                             .heightIn(min = 48.dp)
                             .liquidPress(importBtnInteraction, 0.95f),
                         shape = RoundedCornerShape(20.dp),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp, pressedElevation = 0.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 10.dp)
                     ) {
-                        AppIcon(AppIconType.CAMERA_PLUS, tint = colors.onPrimary, size = 16.dp)
-                        Spacer(Modifier.width(4.dp))
+                        AppIcon(AppIconType.CAMERA_PLUS, tint = colors.onPrimary, size = 15.dp)
+                        Spacer(Modifier.width(3.dp))
                         AnimatedContent(
                             targetState = if (pendingCount > 0) "待补填 $pendingCount" else "导入照片",
                             transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
