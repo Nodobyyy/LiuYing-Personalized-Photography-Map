@@ -21,10 +21,10 @@ android {
         create("online") {
             dimension = "mapMode"
             applicationIdSuffix = ".online"
-            versionCode = 13
-            versionName = "0.5.5"
+            versionCode = 14
+            versionName = "0.5.6"
             buildConfigField("boolean", "ONLINE_MAPS", "true")
-            manifestPlaceholders["appLabel"] = "留影·联网"
+            manifestPlaceholders["appLabel"] = "留影"
         }
     }
     buildFeatures { compose = true; buildConfig = true }

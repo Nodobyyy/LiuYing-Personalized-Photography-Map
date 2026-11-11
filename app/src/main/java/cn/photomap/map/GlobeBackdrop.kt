@@ -9,14 +9,13 @@ import android.graphics.PointF
 import android.graphics.Shader
 import android.os.Build
 import android.view.View
-import org.maplibre.android.geometry.LatLng
+import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.maps.MapLibreMap
 import kotlin.math.PI
 import kotlin.math.acos
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
-import kotlin.math.hypot
 import kotlin.math.ln
 import kotlin.math.round
 import kotlin.math.sin
@@ -36,10 +35,9 @@ internal class GlobeBackdrop(context: Context) : View(context) {
     private var map: MapLibreMap? = null
     private var image: Bitmap? = null
     private var satellite = false
+    private var borders: GlobeBorders? = null
+    private var borderColor = 0
     private var visible = false
-    private var sphere: SphereProjection? = null
-
-    private data class SphereProjection(val origin: PointF, val distance: Double, val focal: Double)
 
     init {
         // Canvas.drawVertices is hardware accelerated starting with API 29.
@@ -47,10 +45,12 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
-    fun show(map: MapLibreMap, bitmap: Bitmap, satellite: Boolean) {
+    fun show(map: MapLibreMap, bitmap: Bitmap, satellite: Boolean, borders: GlobeBorders?, borderColor: Int) {
         this.map = map
         image = bitmap
         this.satellite = satellite
+        this.borders = borders
+        this.borderColor = borderColor
         paint.shader = BitmapShader(bitmap, Shader.TileMode.REPEAT, Shader.TileMode.CLAMP)
         cameraChanged()
     }
@@ -70,39 +70,24 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         val camera = map ?: return
         val bitmap = image ?: return
         val position = camera.cameraPosition
-        if (position.zoom >= OnlineMapAssets.GLOBE_TILE_ZOOM) {
+        if (satellite && position.zoom >= OnlineMapAssets.GLOBE_TILE_ZOOM) {
             drawFlatFallback(canvas, camera, bitmap)
         } else {
-            val target = position.target?.wrap() ?: return
-            drawSphere(canvas, camera, target, bitmap)
+            drawSphere(canvas, position, bitmap)
         }
     }
 
-    private fun measureSphere(camera: MapLibreMap, target: LatLng): SphereProjection? {
-        val projection = camera.projection
-        val origin = projection.toScreenLocation(target)
-        val direction = if (target.latitude >= 0) -1 else 1
-        val near = projection.toScreenLocation(LatLng(target.latitude + direction * 10.0, target.longitude))
-        val far = projection.toScreenLocation(LatLng(target.latitude + direction * 20.0, target.longitude))
-
-        // Recover the sphere's perspective from two points on the central
-        // meridian so the bitmap aligns with the live map camera and its labels.
-        val nearAngle = PI / 18
-        val farAngle = PI / 9
-        val nearScale = hypot((near.x - origin.x).toDouble(), (near.y - origin.y).toDouble()) / sin(nearAngle)
-        val farScale = hypot((far.x - origin.x).toDouble(), (far.y - origin.y).toDouble()) / sin(farAngle)
-        val distance = (nearScale * cos(nearAngle) - farScale * cos(farAngle)) / (nearScale - farScale)
-        val focal = nearScale * (distance - cos(nearAngle))
-        if (!origin.x.isFinite() || !origin.y.isFinite() ||
-            !distance.isFinite() || distance <= 1.0 || !focal.isFinite() || focal <= 0.0) return null
-        return SphereProjection(origin, distance, focal)
-    }
-
-    private fun drawSphere(canvas: Canvas, camera: MapLibreMap, target: LatLng, bitmap: Bitmap) {
-        // The native projection may briefly be between frames during a pan.
-        // Preserve the last valid geometry instead of clearing to black.
-        measureSphere(camera, target)?.let { sphere = it }
-        val (origin, distance, focal) = sphere ?: return
+    private fun drawSphere(canvas: Canvas, camera: CameraPosition, bitmap: Bitmap) {
+        val target = camera.target?.wrap() ?: return
+        val padding = camera.padding
+        val originX = (width + (padding?.get(0) ?: 0.0) - (padding?.get(2) ?: 0.0)) / 2
+        val originY = (height + (padding?.get(1) ?: 0.0) - (padding?.get(3) ?: 0.0)) / 2
+        // MapLibre's default vertical field of view is 2 * atan(1 / 3).
+        // Compute the entire sphere from one camera snapshot. Reading several
+        // projected points during a drag can mix transforms from different frames.
+        val focal = height * 1.5
+        val zoom = GlobeCamera.equatorialZoom(camera.zoom, target.latitude)
+        val distance = 1 + focal / GlobeCamera.surfaceRadius(zoom, resources.displayMetrics.density)
         val horizon = acos(1 / distance)
         val latitude = Math.toRadians(target.latitude)
         val longitude = Math.toRadians(target.longitude)
@@ -118,18 +103,23 @@ internal class GlobeBackdrop(context: Context) : View(context) {
                 val upward = sinAngle * north[slice]
                 val sampleLatitude = asin((cosAngle * sinLatitude + upward * cosLatitude).coerceIn(-1.0, 1.0))
                 val sampleLongitude = longitude + atan2(sinAngle * east[slice], cosAngle * cosLatitude - upward * sinLatitude)
-                x[index] = origin.x + radius * east[slice]
-                y[index] = origin.y - radius * north[slice]
+                x[index] = originX + radius * east[slice]
+                y[index] = originY - radius * north[slice]
                 u[index] = .5 + sampleLongitude / TWO_PI
                 v[index] = mercatorY(sampleLatitude)
             }
         }
+        canvas.save()
+        canvas.rotate(-camera.bearing.toFloat(), originX.toFloat(), originY.toFloat())
         drawMesh(canvas, bitmap, RINGS, SLICES, wrapAround = true)
+        if (camera.zoom < OnlineMapAssets.GLOBE_TILE_ZOOM) {
+            borders?.draw(canvas, originX, originY, latitude, longitude, distance, focal, camera.zoom, borderColor)
+        }
+        canvas.restore()
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        sphere = null
         cameraChanged()
     }
 

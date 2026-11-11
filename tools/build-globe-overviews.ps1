@@ -123,7 +123,6 @@ $outputPath = (Resolve-Path $OutputDirectory).Path
 $base = Read-Tile (Join-Path $ArchiveDirectory 'context.pmtiles') 0 0 0
 $land = [OverviewTile]::ReadRings($base, 'earth')
 $water = [OverviewTile]::ReadRings($base, 'water')
-$borders = (Get-Content (Join-Path $outputPath 'world-boundaries.geojson') -Raw | ConvertFrom-Json).features
 $size = 2048
 
 function Draw-Polygons($graphics, $rings, $color) {
@@ -145,42 +144,18 @@ function Draw-Polygons($graphics, $rings, $color) {
 }
 
 foreach ($theme in @(
-    @{ Name='day'; Land='#efeee7'; Water='#a9d4e9'; Border='#90978c' },
-    @{ Name='night'; Land='#202d25'; Water='#172f3b'; Border='#7e8b80' }
+    @{ Name='day'; Land='#efeee7'; Water='#a9d4e9' },
+    @{ Name='night'; Land='#202d25'; Water='#172f3b' }
 )) {
     $bitmap = [Drawing.Bitmap]::new($size, $size)
     $graphics = [Drawing.Graphics]::FromImage($bitmap)
-    $pen = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml($theme.Border), 1.45)
     try {
         $graphics.Clear([Drawing.ColorTranslator]::FromHtml($theme.Water))
         $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
         Draw-Polygons $graphics $land $theme.Land
         Draw-Polygons $graphics $water $theme.Water
-        foreach ($feature in $borders) {
-            $kind = $feature.properties.kind
-            if ($kind -notin @('country', 'uncertain')) { continue }
-            $pen.DashStyle = if ($kind -eq 'uncertain') { [Drawing.Drawing2D.DashStyle]::Dash } else { [Drawing.Drawing2D.DashStyle]::Solid }
-            foreach ($line in $feature.geometry.coordinates) {
-                $points = [Collections.Generic.List[Drawing.PointF]]::new()
-                $previous = $null
-                foreach ($point in $line) {
-                    $longitude = $point[0]
-                    if ($null -ne $previous -and [Math]::Abs($longitude - $previous) -gt 180) {
-                        if ($points.Count -ge 2) { $graphics.DrawLines($pen, $points.ToArray()) }
-                        $points.Clear()
-                    }
-                    $latitude = [Math]::Clamp([double]$point[1], -85.05112878, 85.05112878)
-                    $x = $size * ($longitude + 180) / 360
-                    $y = $size * (0.5 - [Math]::Asinh([Math]::Tan($latitude*[Math]::PI/180))/(2*[Math]::PI))
-                    $points.Add([Drawing.PointF]::new($x, $y))
-                    $previous = $longitude
-                }
-                if ($points.Count -ge 2) { $graphics.DrawLines($pen, $points.ToArray()) }
-            }
-        }
         $bitmap.Save((Join-Path $outputPath "globe-streets-$($theme.Name).png"), [Drawing.Imaging.ImageFormat]::Png)
     } finally {
-        $pen.Dispose()
         $graphics.Dispose()
         $bitmap.Dispose()
     }

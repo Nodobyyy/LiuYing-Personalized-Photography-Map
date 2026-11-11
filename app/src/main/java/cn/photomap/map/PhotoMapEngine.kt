@@ -37,6 +37,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     val view: MapView
     val mapContainer: FrameLayout
     private val globeBackdrop = if (BuildConfig.ONLINE_MAPS) GlobeBackdrop(context) else null
+    private val globeBorders by lazy { GlobeBorders(context) }
     private var map: MapLibreMap?=null
     private var style: Style?=null
     private var base: LocalMapBundle.Loaded?=null
@@ -112,8 +113,10 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
                 ready.setPrefetchZoomDelta(4)
                 ready.addOnCameraMoveListener { globeBackdrop?.cameraChanged() }
                 globeSpin = GlobeSpin(view, ready, {
-                    !picking && style != null && ready.cameraPosition.zoom <= globeMinimum() + .1
-                }, ::refresh)
+                    val camera = ready.cameraPosition
+                    val latitude = camera.target?.latitude ?: 0.0
+                    !picking && style != null && GlobeCamera.equatorialZoom(camera.zoom, latitude) <= globeMinimum() + .1
+                }, ::refresh, { cameraSettled(ready) })
             }
             // Native gesture constraint is applied while panning. Never move the
             // camera from idle callbacks: that caused a visible jump after release.
@@ -123,9 +126,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).bearing(0.0).tilt(0.0).build()
             ready.addOnCameraIdleListener {
                 globeBackdrop?.cameraChanged()
-                if (globeSpin?.spinning == true) return@addOnCameraIdleListener
-                ready.cameraPosition.let { c->c.target?.let { raw->val p=if(BuildConfig.ONLINE_MAPS) raw.wrap() else raw; prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
-                chooseMap(); refresh();refreshPickHint();refreshMapInfo()
+                if (globeSpin?.inMotion == true) return@addOnCameraIdleListener
+                cameraSettled(ready)
             }
             ready.addOnMapClickListener { coordinate ->
                 if(picking) {ready.animateCamera(CameraUpdateFactory.newLatLng(coordinate));true} else {
@@ -173,6 +175,19 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         }
         view.addOnLayoutChangeListener {_,_,_,_,_,_,_,_,_->updateViewportLimits()}
     }
+    private fun cameraSettled(ready: MapLibreMap) {
+        val camera = ready.cameraPosition
+        camera.target?.let { raw ->
+            val point = if (BuildConfig.ONLINE_MAPS) raw.wrap() else raw
+            context.getSharedPreferences("map-camera", Context.MODE_PRIVATE).edit()
+                .putFloat("lat", point.latitude.toFloat()).putFloat("lon", point.longitude.toFloat())
+                .putFloat("zoom", camera.zoom.toFloat()).apply()
+        }
+        chooseMap()
+        refresh()
+        refreshPickHint()
+        refreshMapInfo()
+    }
     fun update(places: List<Place>, selected: String?) { items=places; selection=selected; revision++; refresh() }
     fun basemap(mode: BasemapMode) {if(basemapMode!=mode) {basemapMode=mode;appearancePrefs.edit().putString("basemap",mode.name).apply();selectedMap="";chooseMap(true);refreshMapInfo()}}
     fun satelliteLabels(show:Boolean) {if(satelliteLabels!=show){satelliteLabels=show;appearancePrefs.edit().putBoolean("satellite-labels",show).apply();selectedMap="";chooseMap(true)}}
@@ -187,7 +202,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
     }
     private fun overviewCamera() = if (BuildConfig.ONLINE_MAPS) {
         CameraUpdateFactory.newCameraPosition(CameraPosition.Builder()
-            .target(LatLng(22.0, 104.0)).zoom(globeMinimum()).bearing(0.0).tilt(0.0).build())
+            .target(LatLng(22.0, 104.0)).zoom(GlobeCamera.zoomAtLatitude(globeMinimum(), 22.0)).bearing(0.0).tilt(0.0).build())
     } else nationalCamera()
     private val occlusionMethod by lazy {
         if (BuildConfig.ONLINE_MAPS) Projection::class.java.getMethod("isLocationOccluded", LatLng::class.java) else null
@@ -278,6 +293,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             }
         }
         val isSatellite = basemapMode == BasemapMode.SATELLITE
+        val borderColor = Color.parseColor(OnlineBoundaries.color(dark, isSatellite))
         val globeOverview = if (BuildConfig.ONLINE_MAPS && bundle != null) {
             OnlineBoundaries.apply(json, china, dark, isSatellite)
             OnlineMapAssets.prepareGlobeOverview(json, basemapMode, dark)
@@ -285,10 +301,11 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         ready.setStyle(Style.Builder().fromJson(json.toString())) { loaded ->
             style=loaded; applying=false
             if (globeOverview != null) scope.launch {
-                val bitmap = withContext(Dispatchers.IO) {
-                    context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) }
+                val (bitmap, borders) = withContext(Dispatchers.IO) {
+                    context.assets.open(globeOverview).use { BitmapFactory.decodeStream(it) } to
+                        runCatching { globeBorders }.getOrNull()
                 }
-                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite)
+                if (style === loaded && bitmap != null) globeBackdrop?.show(ready, bitmap, isSatellite, borders, borderColor)
             }
             loaded.addSource(GeoJsonSource("user-photos",FeatureCollection.fromFeatures(emptyArray<Feature>())))
             val density=context.resources.displayMetrics.density

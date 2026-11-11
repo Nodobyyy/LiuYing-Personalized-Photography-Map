@@ -116,8 +116,39 @@ class NativeOnlineOverviewTest {
                         bitmap.recycle()
                     }
                 }
-                screenshot("online054-globe")
+                screenshot("online056-globe")
                 assertTrue("The globe should show inland Australia and the Mongolia–Russia border", rendered)
+                fun globeWidth(): Int {
+                    val frame = instrumentation.uiAutomation.takeScreenshot()
+                    return try {
+                        val row = frame.height / 2
+                        (0 until frame.width).count { x -> frame.getPixel(x, row) and 0x00ffffff != 0 }
+                    } finally {
+                        frame.recycle()
+                    }
+                }
+                val widthBeforeDrag = globeWidth()
+                var initialLatitude = 0.0
+                scenario.onActivity { initialLatitude = map(it)!!.cameraPosition.target!!.latitude }
+                val drag = Thread { shell("input swipe 760 820 440 1110 1150") }
+                drag.start()
+                try {
+                    repeat(12) {
+                        val widthDuringDrag = globeWidth()
+                        assertTrue("The globe must keep its width during one-finger dragging",
+                            kotlin.math.abs(widthDuringDrag - widthBeforeDrag) < 12)
+                        SystemClock.sleep(55)
+                    }
+                } finally {
+                    drag.join(3000)
+                }
+                scenario.onActivity {
+                    val camera = map(it)!!.cameraPosition
+                    assertTrue("A slow diagonal swipe should turn the globe", camera.target!!.latitude > initialLatitude + 12)
+                    assertEquals("Dragging the globe keeps north up", 0.0, camera.bearing, 0.01)
+                    engine(it).national()
+                }
+                SystemClock.sleep(900)
                 shell("input swipe 790 960 270 960 65")
                 SystemClock.sleep(1300)
                 var longitude = 0.0
@@ -151,6 +182,18 @@ class NativeOnlineOverviewTest {
                 }
                 await("Chinese provincial boundaries must be visible offline") {
                     it.queryRenderedFeatures(viewport, "china-province-borders").isNotEmpty()
+                }
+                for (zoom in listOf(4.5, 4.85, 5.2)) {
+                    scenario.onActivity {
+                        map(it)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(27.0, 99.0), zoom))
+                    }
+                    if (zoom >= 4.8) {
+                        await("The native country border must be present at zoom $zoom") {
+                            it.queryRenderedFeatures(viewport, "world-country-borders").isNotEmpty()
+                        }
+                    }
+                    SystemClock.sleep(400)
+                    screenshot("online056-yunnan-$zoom")
                 }
                 for ((name, location) in listOf("Paris" to LatLng(48.8566, 2.3522),
                     "Tokyo" to LatLng(35.6762, 139.6503), "New York" to LatLng(40.7128, -74.0060))) {

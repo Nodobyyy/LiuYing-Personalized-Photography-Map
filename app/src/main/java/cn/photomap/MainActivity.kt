@@ -282,7 +282,7 @@ class MainActivity : ComponentActivity() {
                 AndroidView(factory={engine.mapContainer},modifier=Modifier.fillMaxSize())
                 if (!BuildConfig.ONLINE_MAPS) {
                 FrostedPanel(Modifier.align(Alignment.TopStart).padding(16.dp),shape=RoundedCornerShape(26.dp),elevation=8.dp) {
-                    Column(Modifier.padding(horizontal=18.dp,vertical=10.dp)) {Text(if(BuildConfig.ONLINE_MAPS) "留影·联网" else "留影·离线",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text("${places.size} 个地点 · ${places.sumOf {it.photoCount}} 张照片",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                    Column(Modifier.padding(horizontal=18.dp,vertical=10.dp)) {Text("留影·离线",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);Text("${places.size} 个地点 · ${places.sumOf {it.photoCount}} 张照片",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
                 }
                 Column(Modifier.align(Alignment.TopEnd).padding(16.dp),horizontalAlignment=Alignment.End,verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     if(!picking) FrostedPanel(shape=RoundedCornerShape(22.dp),elevation=6.dp) { TextButton(onClick={settings=true},enabled=!busy) {Text("数据",fontWeight=FontWeight.Medium)} }

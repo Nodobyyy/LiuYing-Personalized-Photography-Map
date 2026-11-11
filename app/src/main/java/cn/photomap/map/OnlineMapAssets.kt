@@ -28,7 +28,6 @@ object OnlineMapAssets {
         }
         val baseIds = setOf(
             "context-land", "context-water", "embedded-land", "embedded-water",
-            "world-country-borders", "world-uncertain-borders",
             "satellite-world", "satellite-overview", "satellite-online-world"
         )
         for (layer in style.layers()) {
@@ -39,7 +38,7 @@ object OnlineMapAssets {
                     layer.put("layout", JSONObject().put("visibility", "none"))
                     continue
                 }
-                type == "background" || (id in baseIds && !(satellite && type == "line")) -> GLOBE_TILE_ZOOM
+                type == "background" || id in baseIds -> GLOBE_TILE_ZOOM
                 type == "symbol" -> 2.0 // Avoid crowded country labels at the rim of the whole globe.
                 else -> continue
             }
