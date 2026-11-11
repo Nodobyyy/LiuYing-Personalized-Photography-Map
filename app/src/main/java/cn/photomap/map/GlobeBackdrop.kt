@@ -37,6 +37,9 @@ internal class GlobeBackdrop(context: Context) : View(context) {
     private var image: Bitmap? = null
     private var satellite = false
     private var visible = false
+    private var sphere: SphereProjection? = null
+
+    private data class SphereProjection(val origin: PointF, val distance: Double, val focal: Double)
 
     init {
         // Canvas.drawVertices is hardware accelerated starting with API 29.
@@ -53,7 +56,10 @@ internal class GlobeBackdrop(context: Context) : View(context) {
     }
 
     fun cameraChanged() {
-        val shouldDraw = image != null && (satellite || (map?.cameraPosition?.zoom ?: Double.MAX_VALUE) < OnlineMapAssets.GLOBE_TILE_ZOOM)
+        // Keep the atlas behind the native tiles during the handoff. The two
+        // views can present adjacent camera frames during a pinch or reset.
+        val shouldDraw = image != null &&
+            (satellite || (map?.cameraPosition?.zoom ?: Double.MAX_VALUE) < OnlineMapAssets.GLOBE_TILE_ZOOM + .25)
         if (shouldDraw || visible) postInvalidateOnAnimation()
         visible = shouldDraw
     }
@@ -63,15 +69,16 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         if (!visible || width == 0 || height == 0) return
         val camera = map ?: return
         val bitmap = image ?: return
-        if (camera.cameraPosition.zoom >= OnlineMapAssets.GLOBE_TILE_ZOOM) {
-            drawSatelliteFallback(canvas, camera, bitmap)
+        val position = camera.cameraPosition
+        if (position.zoom >= OnlineMapAssets.GLOBE_TILE_ZOOM) {
+            drawFlatFallback(canvas, camera, bitmap)
         } else {
-            drawSphere(canvas, camera, bitmap)
+            val target = position.target?.wrap() ?: return
+            drawSphere(canvas, camera, target, bitmap)
         }
     }
 
-    private fun drawSphere(canvas: Canvas, camera: MapLibreMap, bitmap: Bitmap) {
-        val target = camera.cameraPosition.target ?: return
+    private fun measureSphere(camera: MapLibreMap, target: LatLng): SphereProjection? {
         val projection = camera.projection
         val origin = projection.toScreenLocation(target)
         val direction = if (target.latitude >= 0) -1 else 1
@@ -86,8 +93,16 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         val farScale = hypot((far.x - origin.x).toDouble(), (far.y - origin.y).toDouble()) / sin(farAngle)
         val distance = (nearScale * cos(nearAngle) - farScale * cos(farAngle)) / (nearScale - farScale)
         val focal = nearScale * (distance - cos(nearAngle))
-        if (!distance.isFinite() || distance <= 1.0 || !focal.isFinite() || focal <= 0.0) return
+        if (!origin.x.isFinite() || !origin.y.isFinite() ||
+            !distance.isFinite() || distance <= 1.0 || !focal.isFinite() || focal <= 0.0) return null
+        return SphereProjection(origin, distance, focal)
+    }
 
+    private fun drawSphere(canvas: Canvas, camera: MapLibreMap, target: LatLng, bitmap: Bitmap) {
+        // The native projection may briefly be between frames during a pan.
+        // Preserve the last valid geometry instead of clearing to black.
+        measureSphere(camera, target)?.let { sphere = it }
+        val (origin, distance, focal) = sphere ?: return
         val horizon = acos(1 / distance)
         val latitude = Math.toRadians(target.latitude)
         val longitude = Math.toRadians(target.longitude)
@@ -112,9 +127,15 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         drawMesh(canvas, bitmap, RINGS, SLICES, wrapAround = true)
     }
 
-    private fun drawSatelliteFallback(canvas: Canvas, camera: MapLibreMap, bitmap: Bitmap) {
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        sphere = null
+        cameraChanged()
+    }
+
+    private fun drawFlatFallback(canvas: Canvas, camera: MapLibreMap, bitmap: Bitmap) {
         // Use the current native projection even through the globe-to-street
-        // transition. Detailed satellite tiles cover this mesh when available.
+        // transition. Native tiles cover this mesh when available.
         val projection = camera.projection
         val point = PointF()
         for (row in 0..FLAT_CELLS) {

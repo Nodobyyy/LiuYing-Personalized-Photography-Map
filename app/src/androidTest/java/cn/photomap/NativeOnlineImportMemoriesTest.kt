@@ -125,7 +125,7 @@ class NativeOnlineImportMemoriesTest {
                 waitFor("当前导入的照片")
                 tap("搜索地名或经纬度")
                 shell("input text 48.8566,2.3522")
-                tap("搜索", exact = true)
+                tap("定位到 48.8566,2.3522")
                 waitFor(", 2.352")
                 capture("online05-location-picker.png")
                 tap("确定位置")

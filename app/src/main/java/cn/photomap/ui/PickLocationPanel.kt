@@ -37,8 +37,10 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import cn.photomap.map.PlaceSearch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,49 +61,50 @@ fun PickLocationPanel(
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     var query by remember { mutableStateOf("") }
-    var submitted by remember { mutableStateOf("") }
+    var selectedQuery by remember { mutableStateOf<String?>(null) }
     var results by remember { mutableStateOf(emptyList<Address>()) }
     var status by remember { mutableStateOf("") }
     var showPreview by remember { mutableStateOf(false) }
-    val submit = {
-        focus.clearFocus()
-        keyboard?.hide()
-        submitted = query.trim()
-    }
-    LaunchedEffect(submitted) {
-        if (submitted.isBlank()) return@LaunchedEffect
-        results = emptyList()
-        val coordinates = submitted.split(',', '，').map { it.trim().toDoubleOrNull() }
-        if (coordinates.size == 2) {
-            val (latitude, longitude) = coordinates
-            if (latitude != null && longitude != null && latitude in -90.0..90.0 && longitude in -180.0..180.0) {
-                onResult(latitude, longitude, "")
-                status = ""
-                submitted = ""
-                return@LaunchedEffect
+    val term = query.trim()
+    val coordinate = remember(term) {
+        val parts = term.split(',', '，', limit = 3)
+        val latitude = parts.getOrNull(0)?.trim()?.toDoubleOrNull()
+        val longitude = parts.getOrNull(1)?.trim()?.toDoubleOrNull()
+        if (parts.size == 2 && latitude != null && longitude != null &&
+            latitude in -90.0..90.0 && longitude in -180.0..180.0) {
+            Address(java.util.Locale.getDefault()).apply {
+                this.latitude = latitude
+                this.longitude = longitude
+                setAddressLine(0, "定位到 $term")
             }
-        }
+        } else null
+    }
+    val displayedResults = if (selectedQuery == term) emptyList() else coordinate?.let(::listOf) ?: results
+    LaunchedEffect(term, selectedQuery) {
+        if (term.length < 2 || selectedQuery == term || coordinate != null) return@LaunchedEffect
+        // A partial coordinate should never leave the device as a place-name query.
+        if (term.all { it.isDigit() || it in ".,，+- " }) return@LaunchedEffect
+        delay(500)
         status = "正在搜索…"
         try {
-            val term = submitted
             coroutineScope {
-                val photon = async { lookup { PlaceSearch.find(term) } }
-                val system = async { lookup { withTimeoutOrNull(2_500) { searchAddresses(Geocoder(context), term) } } }
-                val local = system.await()
-                results = mergePlaces(local.orEmpty())
-                if (results.isNotEmpty() && !photon.isCompleted) status = "正在补充其他地点…"
-                val remote = photon.await()
-                results = mergePlaces(local.orEmpty() + remote.orEmpty())
+                val replies = Channel<List<Address>?>(2)
+                launch { replies.send(lookup { PlaceSearch.find(term) }) }
+                launch { replies.send(lookup { withTimeoutOrNull(2_500) { searchAddresses(Geocoder(context), term) } }) }
+                val first = replies.receive()
+                results = mergePlaces(first.orEmpty())
+                if (results.isNotEmpty()) status = "正在补充其他地点…"
+                val second = replies.receive()
+                results = mergePlaces(first.orEmpty() + second.orEmpty())
                 status = when {
                     results.isNotEmpty() -> ""
-                    local == null && remote == null -> "地点搜索暂不可用，可输入经纬度或拖动地图"
+                    first == null && second == null -> "地点搜索暂不可用，可输入经纬度或拖动地图"
                     else -> "没有找到地点，试试加上城市或校区名"
                 }
             }
         } catch (_: IllegalArgumentException) {
             status = "请输入有效的地名或经纬度"
         }
-        submitted = ""
     }
     val colors = MaterialTheme.colorScheme
     FrostedPanel(modifier, shape = RoundedCornerShape(28.dp), elevation = 10.dp) {
@@ -135,14 +138,21 @@ fun PickLocationPanel(
                 }
             }
             OutlinedTextField(
-                query, { query = it.take(160); results = emptyList(); status = ""; submitted = "" },
+                query, {
+                    val next = it.take(160)
+                    if (next.trim() != term) {
+                        results = emptyList()
+                        status = ""
+                        selectedQuery = null
+                    }
+                    query = next
+                },
                 Modifier.fillMaxWidth(),
                 label = { Text("搜索地名或经纬度") },
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { submit() }),
-                trailingIcon = { TextButton(onClick = submit, enabled = query.isNotBlank()) { Text("搜索", fontWeight = FontWeight.SemiBold) } }
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focus.clearFocus(); keyboard?.hide() })
             )
             AnimatedVisibility(
                 visible = status.isNotEmpty(),
@@ -152,13 +162,13 @@ fun PickLocationPanel(
                 Text(status, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
             }
             AnimatedVisibility(
-                visible = results.isNotEmpty(),
+                visible = displayedResults.isNotEmpty(),
                 enter = fadeIn(tween(200)) + expandVertically(),
                 exit = fadeOut(tween(150)) + shrinkVertically()
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     LazyColumn(Modifier.heightIn(max = 152.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(results) { address ->
+                        items(displayedResults) { address ->
                             val label = address.getAddressLine(0) ?: address.featureName ?: query
                             Text(
                                 label,
@@ -167,10 +177,14 @@ fun PickLocationPanel(
                                     .clip(RoundedCornerShape(14.dp))
                                     .background(colors.surface.copy(alpha = 0.55f))
                                     .clickable {
-                                        query = label
-                                        submitted = ""
+                                        val pickedLabel = if (address === coordinate) "" else label
+                                        query = if (address === coordinate) term else label
+                                        selectedQuery = query.trim()
                                         results = emptyList()
-                                        onResult(address.latitude, address.longitude, label)
+                                        status = ""
+                                        focus.clearFocus()
+                                        keyboard?.hide()
+                                        onResult(address.latitude, address.longitude, pickedLabel)
                                     }
                                     .padding(horizontal = 12.dp, vertical = 10.dp),
                                 maxLines = 2,
@@ -179,13 +193,9 @@ fun PickLocationPanel(
                             )
                         }
                     }
-                    Text("找到 ${results.size} 个地点，可滑动查看", style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        "地点搜索 · Android / Photon · © OpenStreetMap",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp)
-                    )
+                    if (displayedResults.size > 1) {
+                        Text("找到 ${displayedResults.size} 个地点，可滑动查看", style = MaterialTheme.typography.labelSmall)
+                    }
                 }
             }
         }
@@ -207,6 +217,8 @@ private suspend fun lookup(search: suspend () -> List<Address>?): List<Address>?
 } catch (_: IOException) {
     null
 } catch (_: JSONException) {
+    null
+} catch (_: IllegalArgumentException) {
     null
 }
 

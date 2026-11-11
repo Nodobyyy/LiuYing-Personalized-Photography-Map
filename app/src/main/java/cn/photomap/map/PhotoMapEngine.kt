@@ -121,6 +121,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             fitFirstView=!prefs.contains("zoom")
             ready.cameraPosition=CameraPosition.Builder().target(LatLng(prefs.getFloat("lat",35f).toDouble(),prefs.getFloat("lon",105f).toDouble())).zoom(prefs.getFloat("zoom",2f).toDouble()).bearing(0.0).tilt(0.0).build()
             ready.addOnCameraIdleListener {
+                globeBackdrop?.cameraChanged()
                 if (globeSpin?.spinning == true) return@addOnCameraIdleListener
                 ready.cameraPosition.let { c->c.target?.let { raw->val p=if(BuildConfig.ONLINE_MAPS) raw.wrap() else raw; prefs.edit().putFloat("lat",p.latitude.toFloat()).putFloat("lon",p.longitude.toFloat()).putFloat("zoom",c.zoom.toFloat()).apply() } }
                 chooseMap(); refresh();refreshPickHint();refreshMapInfo()

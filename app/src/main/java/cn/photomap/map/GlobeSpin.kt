@@ -60,7 +60,6 @@ internal class GlobeSpin(
         val camera = map.cameraPosition
         val target = camera.target ?: return
         map.cancelTransitions()
-        var lastFrame = 0L
         var lastMarkers = 0L
         animation = ValueAnimator.ofFloat(0f, 360f).apply {
             duration = 16_000
@@ -68,8 +67,6 @@ internal class GlobeSpin(
             interpolator = LinearInterpolator()
             addUpdateListener {
                 val now = SystemClock.uptimeMillis()
-                if (now - lastFrame < 30) return@addUpdateListener
-                lastFrame = now
                 val longitude = target.longitude + direction * (it.animatedValue as Float)
                 map.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(camera)
                     .target(LatLng(target.latitude, longitude).wrap()).bearing(0.0).build()))

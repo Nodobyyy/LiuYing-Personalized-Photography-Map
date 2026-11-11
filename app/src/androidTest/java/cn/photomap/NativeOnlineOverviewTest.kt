@@ -122,7 +122,21 @@ class NativeOnlineOverviewTest {
                 SystemClock.sleep(1300)
                 var longitude = 0.0
                 scenario.onActivity { longitude = map(it)!!.cameraPosition.target!!.longitude }
-                SystemClock.sleep(1200)
+                repeat(16) {
+                    val frame = instrumentation.uiAutomation.takeScreenshot()
+                    try {
+                        val globeVisible = (-2..2).any { dx ->
+                            (-2..2).any { dy ->
+                                val color = frame.getPixel(frame.width / 2 + dx * 12, frame.height / 2 + dy * 12)
+                                color and 0x00ffffff != 0
+                            }
+                        }
+                        assertTrue("The atlas must stay visible during globe spin", globeVisible)
+                    } finally {
+                        frame.recycle()
+                    }
+                    SystemClock.sleep(75)
+                }
                 scenario.onActivity {
                     val camera = map(it)!!.cameraPosition
                     assertTrue("A quick swipe should keep the globe moving", kotlin.math.abs(camera.target!!.longitude - longitude) > 15)

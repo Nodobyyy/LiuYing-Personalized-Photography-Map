@@ -13,7 +13,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -35,7 +34,6 @@ fun OnlineMapChrome(
     photoCount: Int,
     pendingCount: Int,
     detail: String,
-    showAttribution: Boolean,
     enabled: Boolean,
     onMap: () -> Unit,
     onData: () -> Unit,
@@ -89,8 +87,6 @@ fun OnlineMapChrome(
                             ) { statsText ->
                                 Text(statsText, style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                             }
-                            if (showAttribution) Text("© OpenStreetMap · OpenMapTiles · OpenFreeMap · Protomaps · EOX",
-                                style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                         }
                     }
                 }

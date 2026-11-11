@@ -21,8 +21,8 @@ android {
         create("online") {
             dimension = "mapMode"
             applicationIdSuffix = ".online"
-            versionCode = 12
-            versionName = "0.5.4"
+            versionCode = 13
+            versionName = "0.5.5"
             buildConfigField("boolean", "ONLINE_MAPS", "true")
             manifestPlaceholders["appLabel"] = "留影·联网"
         }

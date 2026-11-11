@@ -269,13 +269,6 @@ class MainActivity : ComponentActivity() {
         }
         val panelOpen = selected != null || settings || mapOptions || picking || reviewingImport || draft != null
         val needsBackdrop = panelOpen && !(BuildConfig.ONLINE_MAPS && (settings || mapOptions))
-        var showAttribution by remember { mutableStateOf(BuildConfig.ONLINE_MAPS) }
-        LaunchedEffect(Unit) {
-            if (BuildConfig.ONLINE_MAPS) {
-                delay(5_000)
-                showAttribution = false
-            }
-        }
         var backdrop by remember { mutableStateOf<ImageBitmap?>(null) }
         LaunchedEffect(panelOpen, needsBackdrop) {
             if (panelOpen) engine.stopGlobeSpin()
@@ -348,7 +341,7 @@ class MainActivity : ComponentActivity() {
                     }
                 } else if (BuildConfig.ONLINE_MAPS) {
                     OnlineMapChrome(
-                        places.size, places.sumOf { it.photoCount }, pending.size, mapInfo, showAttribution,
+                        places.size, places.sumOf { it.photoCount }, pending.size, mapInfo,
                         !busy, { mapOptions = true }, { settings = true }, { engine.national() },
                         ::startPicking, ::beginDirectImport, ::openMemories
                     )
@@ -507,6 +500,11 @@ class MainActivity : ComponentActivity() {
                             overview + "照片、EXIF 和作品保存在本机。卫星影像为 2016 年数据。"
                         } else "切换不联网。请先在数据中一次性导入全国精细包：全国街道最高 Z15，1995 个建成区配有约 10 米卫星影像；城区索引之外的影像为概览。影像拍摄于 2016 年，不是实时画面。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         if(mapInfo.isNotBlank()) Text(mapInfo,style=MaterialTheme.typography.bodySmall)
+                        if (BuildConfig.ONLINE_MAPS) {
+                            Text("地图数据 © OpenStreetMap 贡献者 · OpenMapTiles · OpenFreeMap · Protomaps · EOX。地点搜索由 Android 系统服务和 Photon 提供。",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick = ::openMapSources) { Text("地图来源与许可") }
+                        }
                         TextButton(onClick={mapOptions=false;settings=true}) {Text(if(BuildConfig.ONLINE_MAPS) "查看地图来源与缓存" else "查看地图数据与导入增强包")}
                         Button(onClick={mapOptions=false},shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("完成",fontWeight=FontWeight.SemiBold)}
                     }
