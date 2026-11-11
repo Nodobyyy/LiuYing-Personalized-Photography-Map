@@ -2,6 +2,7 @@ import {readFileSync, writeFileSync} from 'node:fs';
 
 const input = process.argv[2] || '.tooling/boundaries';
 const output = process.argv[3] || 'app/src/online/assets/maps/world-boundaries.geojson';
+const chinaView = process.argv[4] || 'app/src/online/assets/maps/china-view.json';
 
 function simplify(points, tolerance) {
   if (points.length <= 2) return points;
@@ -42,6 +43,48 @@ for (const name of ['world', 'regions']) {
     }
   }
 }
+
+// A province polygon includes coastlines and the national perimeter. Keep
+// only edges shared by two provinces and emit each shared line once.
+const {provinceBoundaries} = JSON.parse(readFileSync(chinaView, 'utf8'));
+const rings = [];
+const owners = new Map();
+const edgeKey = (a, b) => {
+  const first = a.slice(0, 2).join(',');
+  const second = b.slice(0, 2).join(',');
+  return first < second ? first + '|' + second : second + '|' + first;
+};
+for (const {geometry, properties} of provinceBoundaries.features) {
+  for (const polygon of geometry.coordinates) {
+    for (const ring of polygon) {
+      rings.push(ring);
+      for (let i = 1; i < ring.length; i++) {
+        const key = edgeKey(ring[i - 1], ring[i]);
+        if (!owners.has(key)) owners.set(key, properties.gb);
+        else if (owners.get(key) !== properties.gb) owners.set(key, null);
+      }
+    }
+  }
+}
+
+const sharedLines = [];
+for (const ring of rings) {
+  let line = [];
+  for (let i = 1; i < ring.length; i++) {
+    const key = edgeKey(ring[i - 1], ring[i]);
+    if (owners.get(key) === null) {
+      if (!line.length) line.push(ring[i - 1]);
+      line.push(ring[i]);
+      owners.delete(key);
+    } else if (line.length) {
+      sharedLines.push(line);
+      line = [];
+    }
+  }
+  if (line.length) sharedLines.push(line);
+}
+if (!sharedLines.length) throw Error('Expected shared province boundaries');
+grouped.set('china-region', sharedLines);
 
 const features = [];
 for (const [kind, lines] of grouped) {

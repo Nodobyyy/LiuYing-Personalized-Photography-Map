@@ -7,11 +7,9 @@ internal object OnlineBoundaries {
     fun color(dark: Boolean, satellite: Boolean) =
         if (satellite) "#f7f0da" else if (dark) "#9eaaa0" else "#787f72"
 
-    fun apply(style: JSONObject, china: ChinaView, dark: Boolean, satellite: Boolean) {
+    fun apply(style: JSONObject, dark: Boolean, satellite: Boolean) {
         val sources = style.getJSONObject("sources")
-        sources.put("world-admin", JSONObject("""{"type":"geojson","data":"asset://maps/world-boundaries.geojson","maxzoom":7}"""))
-        sources.put("china-admin", JSONObject().put("type", "geojson")
-            .put("maxzoom", 8).put("data", china.data.getJSONObject("provinceBoundaries")))
+        sources.put("world-admin", JSONObject("""{"type":"geojson","data":"asset://maps/world-boundaries.geojson","maxzoom":8}"""))
         val color = color(dark, satellite)
         val layers = style.getJSONArray("layers")
         fun line(id: String, source: String, minZoom: Double, opacity: Double, width: Double): JSONObject =
@@ -25,7 +23,7 @@ internal object OnlineBoundaries {
         uncertain.getJSONObject("paint").put("line-dasharray", JSONArray("[3,2]"))
         layers.put(uncertain)
         layers.put(line("world-region-borders", "world-admin", 3.3, .55, .55).put("filter", kind("region")))
-        layers.put(line("china-province-borders", "china-admin", 3.3, .55, .55))
+        layers.put(line("china-province-borders", "world-admin", 3.3, .55, .55).put("filter", kind("china-region")))
         if (sources.has("base")) {
             val local = line("online-local-borders", "base", 9.5, .48, .48).put("source-layer", "boundary")
                 .put("filter", JSONArray("""[">=",["coalesce",["get","admin_level"],0],5]"""))

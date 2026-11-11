@@ -295,7 +295,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val isSatellite = basemapMode == BasemapMode.SATELLITE
         val borderColor = Color.parseColor(OnlineBoundaries.color(dark, isSatellite))
         val globeOverview = if (BuildConfig.ONLINE_MAPS && bundle != null) {
-            OnlineBoundaries.apply(json, china, dark, isSatellite)
+            OnlineBoundaries.apply(json, dark, isSatellite)
             OnlineMapAssets.prepareGlobeOverview(json, basemapMode, dark)
         } else null
         ready.setStyle(Style.Builder().fromJson(json.toString())) { loaded ->

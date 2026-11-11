@@ -7,4 +7,4 @@ https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_50m_admin
 First-level administrative boundaries outside China
 https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_10m_admin_1_states_provinces_lines.geojson
 
-The bundled geometry is simplified for the overview. China province boundaries come from china-view.json. Finer boundaries use OpenFreeMap/OpenMapTiles and depend on available data.
+The bundled geometry is simplified for the overview. Interior China province boundaries are extracted from shared polygon edges in china-view.json, without repeating the national perimeter or coastline. Finer boundaries use OpenFreeMap/OpenMapTiles and depend on available data.
