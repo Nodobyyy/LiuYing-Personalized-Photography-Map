@@ -568,7 +568,7 @@ class MainActivity : ComponentActivity() {
                         } else "切换不联网。请先在数据中一次性导入全国精细包：全国街道最高 Z15，1995 个建成区配有约 10 米卫星影像；城区索引之外的影像为概览。影像拍摄于 2016 年，不是实时画面。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         if(mapInfo.isNotBlank()) Text(mapInfo,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         if (BuildConfig.ONLINE_MAPS) {
-                            Text("地图数据 © OpenStreetMap 贡献者 · OpenMapTiles · OpenFreeMap · Protomaps · 高德 · Esri World Imagery · EOX。地点搜索由 Android 系统服务和 Photon 提供。",
+                            Text("地图数据 © OpenStreetMap 贡献者 · OpenMapTiles · OpenFreeMap · Protomaps · 高德 · 必应卫星 (EdgeOne) · Esri World Imagery · EOX。地点搜索由 Android 系统服务和 Photon 提供。",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             TextButton(onClick = ::openMapSources) { Text("地图来源与许可") }
                         }
@@ -605,7 +605,7 @@ class MainActivity : ComponentActivity() {
                     )
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(mode.title,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
-                        Text(if(BuildConfig.ONLINE_MAPS && mode==BasemapMode.SATELLITE) "国内免 VPN 直连高德高清影像（已校正到 WGS-84），海外使用 Esri；可叠加街道" else mode.description,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if(BuildConfig.ONLINE_MAPS && mode==BasemapMode.SATELLITE) "全球国内 CDN 免 VPN 秒开：境内高德（已校正到 WGS-84），海外必应国内节点；可叠加街道" else mode.description,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

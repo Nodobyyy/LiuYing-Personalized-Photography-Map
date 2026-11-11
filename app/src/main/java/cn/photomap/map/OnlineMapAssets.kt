@@ -84,13 +84,13 @@ object OnlineMapAssets {
                 .put("paint", JSONObject().put("raster-fade-duration", 200))
             val regionalWorldLayer = JSONObject(remoteLayer.toString())
                 .put("id", "satellite-online-world").put("minzoom", WORLD_SATELLITE_TRANSITION)
-                .put("maxzoom", SATELLITE_DETAIL_ZOOM)
+                .apply { remove("maxzoom") }
                 .put("paint", JSONObject().put("raster-fade-duration", 150))
             val localLayer = overview.satellite.getJSONArray("layers").getJSONObject(0)
                 .put("minzoom", WORLD_SATELLITE_TRANSITION)
                 .apply { remove("maxzoom") }
-            // Retain the bundled global and China Z0-7 overview imagery underneath detailed
-            // satellite tiles at all zoom levels so zooming never shows a blank screen while loading.
+            // Retain the bundled global Z0-2, regional online Z4-7 and China Z0-7 overview imagery
+            // underneath detailed satellite tiles at all zoom levels so zooming never shows a blank screen while loading.
             satellite.put("layers", JSONArray()
                 .put(JSONObject("""{"id":"satellite-world","source":"satellite-world","type":"raster","paint":{"raster-fade-duration":0}}"""))
                 .put(regionalWorldLayer)

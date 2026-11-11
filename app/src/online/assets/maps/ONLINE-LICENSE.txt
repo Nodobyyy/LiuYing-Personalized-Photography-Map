@@ -4,7 +4,7 @@ https://openfreemap.org/
 https://www.openstreetmap.org/copyright
 Source endpoint https://tiles.openfreemap.org/planet (weekly data, no key or account). Local custom style; no remote style/sprite execution. Chinese boundary references remain separate.
 Satellite (mainland China): AutoNavi / Gaode satellite imagery (webst01-04.is.autonavi.com), converted on-device from GCJ-02 to WGS-84 so it aligns with photo GPS coordinates.
-Satellite (elsewhere / fallback): Esri, Maxar, Earthstar Geographics, and the GIS User Community (ArcGIS World Imagery).
+Satellite (outside mainland China / high-zoom fallback): Microsoft Bing Maps Aerial via domestic Tencent EdgeOne CDN (t0-t3.dynamic.tiles.ditu.live.com, standard WGS-84 QuadKey tiles), with Esri, Maxar, Earthstar Geographics, and the GIS User Community (ArcGIS World Imagery) as final fallback.
 https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer
 Bundled overview imagery: EOX Sentinel-2 cloudless 2016 (Contains modified Copernicus Sentinel data 2016, CC BY 4.0). https://maps.eox.at/
 Only HTTPS GET/HEAD map resource requests to the listed tile hosts are permitted. No photograph, EXIF or photo-library data is sent. Fonts are local SIL OFL.

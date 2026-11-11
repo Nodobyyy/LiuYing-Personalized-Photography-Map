@@ -12,7 +12,7 @@
 
 卫星图使用 EOX Sentinel-2 cloudless 2016，按 CC BY 4.0 署名。城区范围取自 GHSL 2025，最高级图像按标准瓦片网格拼接，低层级为重采样。精细覆盖外显示内置概览。 [EOX 地图](https://maps.eox.at/) · [GHSL 城区数据库](https://human-settlement.emergency.copernicus.eu/ghs_ucdb_2024.php)
 
-联网版从 OpenFreeMap 请求街道矢量资源；卫星瓦片在中国境内请求高德卫星影像并在端侧实时重采样校正至 WGS84，境外或无数据区域回退至 Esri World Imagery（内置全球概览使用 EOX Sentinel-2 cloudless 2016）。样式、边界和字形随 APK 提供。应用对地图客户端限制 HTTPS 主机、路径和请求方法，并限制地图缓存为 256 MiB。照片、作品、EXIF 和备注保留在本地。 [OpenFreeMap](https://openfreemap.org/) · [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) · [EOX WMTS 说明](https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml)
+联网版从 OpenFreeMap 请求街道矢量资源；卫星瓦片在中国境内请求高德卫星影像并在端侧实时重采样校正至 WGS84，中国境外及高缩放补充区域请求部署在国内 EdgeOne CDN 的必应全球卫星影像（`t0-t3.dynamic.tiles.ditu.live.com`，原生 WGS84），并以 Esri World Imagery 作为兜底（内置全球概览使用 EOX Sentinel-2 cloudless 2016）。样式、边界和字形随 APK 提供。应用对地图客户端限制 HTTPS 主机、路径和请求方法，并限制地图缓存为 256 MiB。照片、作品、EXIF 和备注保留在本地。 [OpenFreeMap](https://openfreemap.org/) · [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9) · [EOX WMTS 说明](https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml)
 
 ## 版图和文字
 

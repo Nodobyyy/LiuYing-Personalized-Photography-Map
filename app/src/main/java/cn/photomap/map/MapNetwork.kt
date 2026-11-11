@@ -22,7 +22,7 @@ object MapNetwork {
     const val CACHE_MIB = 256L
     private const val PLANET = "https://tiles.openfreemap.org/planet"
     private const val SATELLITE_WARMUP_1 = "https://webst01.is.autonavi.com/appmaptile?style=6&x=13&y=6&z=4"
-    private const val SATELLITE_WARMUP_2 = "https://webst02.is.autonavi.com/appmaptile?style=6&x=13&y=6&z=4"
+    private const val SATELLITE_WARMUP_2 = "https://t0.dynamic.tiles.ditu.live.com/comp/ch/a132?it=A&n=z"
     /** Virtual host served on-device: WGS-84 tiles rebuilt from domestic imagery (see [GcjSatellite]). */
     const val LOCAL_SATELLITE_HOST = "satellite.photomap.local"
     private const val INDEX_MAX_AGE_MS = 60 * 60 * 1000L
@@ -37,6 +37,9 @@ object MapNetwork {
     private val localSatellitePath = Regex("/([0-9]{1,2})/([0-9]+)/([0-9]+)[.]jpg")
     private val autonaviHosts = setOf("webst01.is.autonavi.com", "webst02.is.autonavi.com", "webst03.is.autonavi.com", "webst04.is.autonavi.com")
     private val autonaviQuery = Regex("style=6&x=[0-9]+&y=[0-9]+&z=[0-9]{1,2}")
+    private val bingChinaHosts = setOf("t0.dynamic.tiles.ditu.live.com", "t1.dynamic.tiles.ditu.live.com", "t2.dynamic.tiles.ditu.live.com", "t3.dynamic.tiles.ditu.live.com")
+    private val bingChinaPath = Regex("/comp/ch/a[0-3]{1,20}")
+    private val bingChinaQuery = Regex("it=A&n=z")
     /** Raw domestic tiles are shared by up to four corrected tiles; keep recent ones in memory. */
     private val sourceTiles by lazy {
         object : android.util.LruCache<String, ByteArray>(12 * 1024 * 1024) {
@@ -50,11 +53,15 @@ object MapNetwork {
             "tiles.maps.eox.at", "a.tiles.maps.eox.at", "b.tiles.maps.eox.at", "c.tiles.maps.eox.at" -> path.matches(eoxSatellitePath)
             else->false
         }
-    /** Same policy, additionally permitting the fixed read-only AutoNavi satellite tile query. */
+    /** Same policy, additionally permitting the fixed read-only AutoNavi and Bing China satellite tile queries. */
     fun allowed(method:String,scheme:String,host:String,path:String,query:String?,hasBody:Boolean):Boolean =
-        if (host in autonaviHosts) (method == "GET" || method == "HEAD") && scheme == "https" && !hasBody &&
-            path == "/appmaptile" && query?.matches(autonaviQuery) == true
-        else allowed(method, scheme, host, path, query != null, hasBody)
+        when (host) {
+            in autonaviHosts -> (method == "GET" || method == "HEAD") && scheme == "https" && !hasBody &&
+                path == "/appmaptile" && query?.matches(autonaviQuery) == true
+            in bingChinaHosts -> (method == "GET" || method == "HEAD") && scheme == "https" && !hasBody &&
+                path.matches(bingChinaPath) && query?.matches(bingChinaQuery) == true
+            else -> allowed(method, scheme, host, path, query != null, hasBody)
+        }
     @Synchronized
     fun configure(context: Context, china: ChinaView? = null) {
         if (configured) return
@@ -144,9 +151,23 @@ object MapNetwork {
                     .header("Cache-Control", "max-age=2592000")
                     .body(corrected.toResponseBody("image/jpeg".toMediaType())).build()
             } else {
-                // Outside mainland China (or if the domestic source fails) use global WGS-84 imagery.
-                chain.proceed(request.newBuilder()
-                    .url("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x").build())
+                // Outside mainland China (or if AutoNavi lacks high-zoom coverage), use the domestic
+                // EdgeOne-backed Bing aerial service (t0-t3.dynamic.tiles.ditu.live.com, ~40ms in China,
+                // standard WGS-84 global imagery up to Z19), with Esri as final fallback.
+                val qk = GcjSatellite.toQuadKey(z, x, y)
+                val bingHost = "t${(x + y) and 3}.dynamic.tiles.ditu.live.com"
+                val bingResp = try {
+                    chain.proceed(request.newBuilder().url("https://$bingHost/comp/ch/a$qk?it=A&n=z").build())
+                } catch (_: IOException) {
+                    null
+                }
+                if (bingResp != null && bingResp.isSuccessful && bingResp.header("X-VE-Tile-Info") != "no-tile") {
+                    bingResp
+                } else {
+                    bingResp?.close()
+                    chain.proceed(request.newBuilder()
+                        .url("https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/$z/$y/$x").build())
+                }
             }
         }
         val client = raw.newBuilder()

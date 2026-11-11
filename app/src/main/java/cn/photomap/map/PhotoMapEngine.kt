@@ -332,7 +332,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
                 val worldZoom = json.optJSONObject("sources")?.optJSONObject("context-detail")?.optInt("maxzoom") ?: 0
                 val overview = if (hasOnlineOverview) "内置全球道路 Z$worldZoom、中国街道 Z10 和卫星 Z7 · " else ""
-                "${overview}OpenFreeMap 在线街道 · 高德/Esri 卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
+                "${overview}OpenFreeMap 在线街道 · 高德/必应国内节点卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
             } else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
             if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(overviewCamera())}}
             refresh();refreshPickHint();refreshMapInfo();chooseMap()
@@ -420,7 +420,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val ready = map ?: return
         suggestedName = name
         val coordinates="%.6f, %.6f".format(target.latitude,target.longitude)
-        val detail=if(BuildConfig.ONLINE_MAPS) {if(basemapMode==BasemapMode.SATELLITE) "\n2016 年卫星影像；精细选点可切换街道图" else ""} else if(basemapMode==BasemapMode.SATELLITE) "\n"+if(fineSatelliteLoaded && urban.contains(target.latitude,target.longitude)) "2016 年城区影像；精细选点可切换街道图" else "当前为概览影像，精细选点请切换街道图" else if(selectedMap=="base" && ready.cameraPosition.zoom>10) "\n尚未导入精细包，当前为概览图" else ""
+        val detail=if(BuildConfig.ONLINE_MAPS) {if(basemapMode==BasemapMode.SATELLITE) "\n高清卫星影像；精细选点也可切换街道图" else ""} else if(basemapMode==BasemapMode.SATELLITE) "\n"+if(fineSatelliteLoaded && urban.contains(target.latitude,target.longitude)) "2016 年城区影像；精细选点可切换街道图" else "当前为概览影像，精细选点请切换街道图" else if(selectedMap=="base" && ready.cameraPosition.zoom>10) "\n尚未导入精细包，当前为概览图" else ""
         onPickContext((if(suggestedName.isBlank()) coordinates else "附近：$suggestedName\n$coordinates")+detail,true)
     }
     private fun refreshMapInfo() {

@@ -47,6 +47,24 @@ internal object GcjSatellite {
         bytes != null && bytes.size > 512 &&
             bytes[0] == 0xFF.toByte() && bytes[1] == 0xD8.toByte() && bytes[2] == 0xFF.toByte()
 
+    /**
+     * Converts Web-Mercator (z, x, y) into a Bing Maps QuadKey (base-4 string of length z).
+     * Used for the domestic EdgeOne-backed Bing aerial tile service (`t0-t3.dynamic.tiles.ditu.live.com`),
+     * which serves standard WGS-84 aerial imagery globally with ~40ms latency inside mainland China.
+     */
+    fun toQuadKey(z: Int, x: Int, y: Int): String {
+        if (z <= 0) return "0"
+        val chars = CharArray(z)
+        for (i in z downTo 1) {
+            var digit = 0
+            val mask = 1 shl (i - 1)
+            if ((x and mask) != 0) digit += 1
+            if ((y and mask) != 0) digit += 2
+            chars[z - i] = ('0'.code + digit).toChar()
+        }
+        return String(chars)
+    }
+
     private fun center(z: Int, x: Int, y: Int): Pair<Double, Double> {
         val n = (1 shl z).toDouble()
         val lon = (x + 0.5) / n * 360.0 - 180.0
