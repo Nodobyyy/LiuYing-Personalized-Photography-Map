@@ -39,12 +39,14 @@ fun Memories(
     dark: Boolean,
     library: Library,
     onClose: () -> Unit,
-    onOpen: (PhotoDay, Int) -> Unit
+    onOpen: (PhotoDay, Int) -> Unit,
+    onLocate: ((String) -> Unit)? = null
 ) {
     val dateFormat = remember { DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日") }
     val timeline = remember(days) { days.sortedBy { it.date } }
     val anchor = remember(timeline, anniversary) { anniversaryPage(timeline, anniversary) }
     val pager = rememberPagerState(initialPage = anchor) { timeline.size }
+
     FullScreenDialog(onDismiss = onClose, dark = dark, compactTop = true) {
         val colors = MaterialTheme.colorScheme
         Column(
@@ -53,7 +55,7 @@ fun Memories(
                 .background(Brush.verticalGradient(listOf(colors.surface, colors.surfaceVariant, colors.surface)))
         ) {
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -68,28 +70,50 @@ fun Memories(
                         Text("返回", fontWeight = FontWeight.SemiBold)
                     }
                 }
-                Column {
-                    Text("忆往昔", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("回到 ${anniversary.format(dateFormat)} 前后", style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Column(Modifier.weight(1f)) {
+                    Text("忆往昔", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("上下滑动回看光影时光", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
+                if (timeline.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = colors.primaryContainer.copy(alpha = 0.72f)
+                    ) {
+                        Text(
+                            "${pager.currentPage + 1} / ${timeline.size}",
+                            Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = colors.onPrimaryContainer,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
             if (days.isEmpty()) {
                 Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     FrostedPanel(shape = RoundedCornerShape(28.dp), elevation = 6.dp) {
-                        Text(
-                            "有拍摄日期的照片会出现在这里。导入照片后，就可以回看这一天前后的记录。",
-                            Modifier.padding(24.dp),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Column(
+                            Modifier.padding(28.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            AppIcon(AppIconType.HISTORY, tint = colors.primary, size = 32.dp)
+                            Text("还没有带日期的记忆", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "导入带有拍摄日期的照片后，这里会按时间轴为你珍藏每一天的光影。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             } else {
                 val rimBorder = remember {
                     Brush.linearGradient(
                         listOf(
-                            Color.White.copy(alpha = 0.36f),
-                            Color.White.copy(alpha = 0.12f),
-                            Color.White.copy(alpha = 0.24f)
+                            Color.White.copy(alpha = 0.34f),
+                            Color.White.copy(alpha = 0.10f),
+                            Color.White.copy(alpha = 0.22f)
                         ),
                         start = Offset(0f, 0f),
                         end = Offset(800f, 1200f)
@@ -98,13 +122,13 @@ fun Memories(
                 VerticalPager(
                     state = pager,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 10.dp),
-                    pageSpacing = 16.dp,
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 14.dp),
+                    pageSpacing = 14.dp,
                     key = { timeline[it].date.toEpochDay() }
                 ) { index ->
                     val day = timeline[index]
                     val first = day.photos.first()
-                    val shape = RoundedCornerShape(30.dp)
+                    val shape = RoundedCornerShape(28.dp)
                     Column(
                         Modifier
                             .fillMaxSize()
@@ -112,10 +136,10 @@ fun Memories(
                             .graphicsLayer {
                                 val pageOffset = ((pager.currentPage - index) + pager.currentPageOffsetFraction).absoluteValue
                                 val fraction = 1f - pageOffset.coerceIn(0f, 1f)
-                                val s = 0.93f + 0.07f * fraction
+                                val s = 0.94f + 0.06f * fraction
                                 scaleX = s
                                 scaleY = s
-                                alpha = 0.72f + 0.28f * fraction
+                                alpha = 0.76f + 0.24f * fraction
                             },
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -125,36 +149,56 @@ fun Memories(
                                 .weight(1f)
                                 .shadow(12.dp, shape, ambientColor = Color.Black.copy(alpha = 0.35f), spotColor = Color.Black.copy(alpha = 0.4f))
                                 .clip(shape)
-                                .background(Color(0xff1e2526))
+                                .background(Color(0xff141c1e))
                                 .border(1.dp, rimBorder, shape)
                                 .clickable { onOpen(day, 0) }
                         ) {
                             AsyncImage(
                                 library.file(first.photo.thumbnail), contentDescription = null,
-                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().blur(30.dp)
+                                contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().blur(32.dp)
                             )
-                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .26f)))
+                            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .24f)))
+                            // Full-bleed photo without awkward bottom gap
                             AsyncImage(
                                 model = ImageRequest.Builder(LocalContext.current).data(library.file(first.photo.original)).size(1080).build(),
                                 contentDescription = first.photo.title.ifBlank { first.photo.filename },
                                 contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize().padding(bottom = 84.dp)
+                                modifier = Modifier.fillMaxSize()
                             )
-                            Column(
+                            Row(
                                 Modifier
                                     .align(Alignment.BottomCenter)
                                     .fillMaxWidth()
-                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xCC0D1312), Color(0xEB0A0E0E))))
-                                    .padding(start = 18.dp, end = 18.dp, top = 26.dp, bottom = 16.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xB80A1012), Color(0xE8070B0D))))
+                                    .padding(start = 18.dp, end = 14.dp, top = 36.dp, bottom = 16.dp),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text(day.date.format(dateFormat), color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                                val tag = when {
-                                    day.date == anniversary -> "去年今天"
-                                    index == anchor -> "最接近去年今天"
-                                    else -> first.placeName
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(day.date.format(dateFormat), color = Color.White, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                    val tag = when {
+                                        day.date == anniversary -> "去年今天"
+                                        index == anchor -> "最接近去年今天"
+                                        else -> first.placeName
+                                    }
+                                    Text("$tag · ${day.photos.size} 张", color = Color.White.copy(alpha = .88f), style = MaterialTheme.typography.labelMedium)
                                 }
-                                Text("$tag · ${day.photos.size} 张", color = Color.White.copy(alpha = .90f), style = MaterialTheme.typography.labelMedium)
+                                if (onLocate != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = Color.White.copy(alpha = 0.16f),
+                                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable { onLocate(first.record.locationId) }
+                                    ) {
+                                        Row(
+                                            Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            AppIcon(AppIconType.MAP_PIN, tint = Color(0xFF6EE7B7), size = 14.dp)
+                                            Text("看地图", color = Color.White, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
                             }
                         }
                         if (day.photos.size > 1) {
@@ -179,4 +223,3 @@ fun Memories(
         }
     }
 }
-

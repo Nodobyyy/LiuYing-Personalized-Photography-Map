@@ -29,7 +29,13 @@ enum class AppIconType {
     CHECK,
     SPARKLES,
     TRASH,
-    EDIT
+    EDIT,
+    CALENDAR,
+    MAP_PIN,
+    MORE_VERT,
+    SLIDERS,
+    CHEVRON_RIGHT,
+    GLOBE
 }
 
 /**
@@ -144,6 +150,14 @@ fun AppIcon(
                 }
                 drawPath(arrow, tint, style = stroke)
             }
+            AppIconType.CHEVRON_RIGHT -> {
+                val arrow = Path().apply {
+                    moveTo(w * 0.38f, h * 0.24f)
+                    lineTo(w * 0.64f, h * 0.50f)
+                    lineTo(w * 0.38f, h * 0.76f)
+                }
+                drawPath(arrow, tint, style = stroke)
+            }
             AppIconType.INFO -> {
                 drawCircle(tint, radius = w * 0.38f, center = Offset(w * 0.5f, h * 0.5f), style = stroke)
                 drawLine(tint, Offset(w * 0.5f, h * 0.46f), Offset(w * 0.5f, h * 0.69f), strokeWidth = stroke.width, cap = StrokeCap.Round)
@@ -191,6 +205,47 @@ fun AppIcon(
                     close()
                 }
                 drawPath(pen, tint, style = stroke)
+            }
+            AppIconType.CALENDAR -> {
+                drawRoundRect(
+                    color = tint,
+                    topLeft = Offset(w * 0.16f, h * 0.24f),
+                    size = Size(w * 0.68f, h * 0.60f),
+                    cornerRadius = CornerRadius(w * 0.12f, w * 0.12f),
+                    style = stroke
+                )
+                drawLine(tint, Offset(w * 0.16f, h * 0.44f), Offset(w * 0.84f, h * 0.44f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.34f, h * 0.14f), Offset(w * 0.34f, h * 0.30f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawLine(tint, Offset(w * 0.66f, h * 0.14f), Offset(w * 0.66f, h * 0.30f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+            }
+            AppIconType.MAP_PIN -> {
+                val pin = Path().apply {
+                    moveTo(w * 0.5f, h * 0.86f)
+                    cubicTo(w * 0.22f, h * 0.58f, w * 0.20f, h * 0.42f, w * 0.20f, h * 0.38f)
+                    cubicTo(w * 0.20f, h * 0.20f, w * 0.34f, h * 0.12f, w * 0.50f, h * 0.12f)
+                    cubicTo(w * 0.66f, h * 0.12f, w * 0.80f, h * 0.20f, w * 0.80f, h * 0.38f)
+                    cubicTo(w * 0.80f, h * 0.42f, w * 0.78f, h * 0.58f, w * 0.50f, h * 0.86f)
+                    close()
+                }
+                drawPath(pin, tint, style = stroke)
+                drawCircle(tint, radius = w * 0.10f, center = Offset(w * 0.5f, h * 0.38f), style = stroke)
+            }
+            AppIconType.MORE_VERT -> {
+                val r = w * 0.075f
+                drawCircle(tint, radius = r, center = Offset(w * 0.5f, h * 0.25f))
+                drawCircle(tint, radius = r, center = Offset(w * 0.5f, h * 0.50f))
+                drawCircle(tint, radius = r, center = Offset(w * 0.5f, h * 0.75f))
+            }
+            AppIconType.SLIDERS -> {
+                drawLine(tint, Offset(w * 0.18f, h * 0.30f), Offset(w * 0.82f, h * 0.30f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawCircle(tint, radius = w * 0.09f, center = Offset(w * 0.36f, h * 0.30f))
+                drawLine(tint, Offset(w * 0.18f, h * 0.70f), Offset(w * 0.82f, h * 0.70f), strokeWidth = stroke.width, cap = StrokeCap.Round)
+                drawCircle(tint, radius = w * 0.09f, center = Offset(w * 0.64f, h * 0.70f))
+            }
+            AppIconType.GLOBE -> {
+                drawCircle(tint, radius = w * 0.38f, center = Offset(w * 0.5f, h * 0.5f), style = stroke)
+                drawOval(tint, topLeft = Offset(w * 0.32f, h * 0.12f), size = Size(w * 0.36f, h * 0.76f), style = stroke)
+                drawLine(tint, Offset(w * 0.14f, h * 0.50f), Offset(w * 0.86f, h * 0.50f), strokeWidth = stroke.width, cap = StrokeCap.Round)
             }
         }
     }

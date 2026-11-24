@@ -58,6 +58,7 @@ class MainActivity : ComponentActivity() {
     private var pickAllowed by mutableStateOf(false)
     private var adjusting by mutableStateOf(false)
     private var settings by mutableStateOf(false)
+    private var placesSheet by mutableStateOf(false)
     private var licenseText by mutableStateOf("")
     private var maps by mutableStateOf<List<RegionalMap>>(emptyList())
     private var themeChoice by mutableIntStateOf(0)
@@ -238,6 +239,10 @@ class MainActivity : ComponentActivity() {
     }
     private fun cancelDraft() {
         val old=draft ?: return
+        if (old.isUntouchedNewDraft) {
+            draft=null;picking=false;adjusting=false;engine.picking=false
+            return
+        }
         confirmation="放弃尚未保存的修改及新导入照片？已有作品不会改变。" to {
             work("正在清理未保存照片") {library.discard(old.added.toList());draft=null;picking=false;adjusting=false;engine.picking=false}
         }
@@ -266,26 +271,26 @@ class MainActivity : ComponentActivity() {
         }
         val colors = when {
             BuildConfig.ONLINE_MAPS && dark -> darkColorScheme(
-                primary = Color(0xffb4d8c7), onPrimary = Color(0xff123228),
-                primaryContainer = Color(0xff244b40), onPrimaryContainer = Color(0xffdaf2e6),
-                secondaryContainer = Color(0xff354640), onSecondaryContainer = Color(0xffdce8e2),
-                surface = Color(0xff171f1d), onSurface = Color(0xffeaf2ee),
-                surfaceVariant = Color(0xff26332f), onSurfaceVariant = Color(0xffc0cfc9),
-                outline = Color(0xff7d918a), outlineVariant = Color(0xff3d4f49)
+                primary = Color(0xff6ee7b7), onPrimary = Color(0xff06281e),
+                primaryContainer = Color(0xff153f34), onPrimaryContainer = Color(0xffd1fae5),
+                secondaryContainer = Color(0xff1e2d31), onSecondaryContainer = Color(0xffe2e8f0),
+                surface = Color(0xff10171a), onSurface = Color(0xfff1f5f9),
+                surfaceVariant = Color(0xff1a2428), onSurfaceVariant = Color(0xff94a3b8),
+                outline = Color(0xff475569), outlineVariant = Color(0xff26353a)
             )
             BuildConfig.ONLINE_MAPS -> lightColorScheme(
-                primary = Color(0xff285749), onPrimary = Color.White,
-                primaryContainer = Color(0xffc9e8da), onPrimaryContainer = Color(0xff102e24),
-                secondaryContainer = Color(0xffe0ebe5), onSecondaryContainer = Color(0xff1e352d),
-                surface = Color(0xfffbfaf5), onSurface = Color(0xff171f1d),
-                surfaceVariant = Color(0xffe9eee7), onSurfaceVariant = Color(0xff42524c),
-                outline = Color(0xff6b7d76), outlineVariant = Color(0xffbfc9c3)
+                primary = Color(0xff0f5c44), onPrimary = Color.White,
+                primaryContainer = Color(0xffd1f2e4), onPrimaryContainer = Color(0xff083426),
+                secondaryContainer = Color(0xffe4eee9), onSecondaryContainer = Color(0xff163329),
+                surface = Color(0xfff8faf9), onSurface = Color(0xff0f172a),
+                surfaceVariant = Color(0xffebf1ee), onSurfaceVariant = Color(0xff475569),
+                outline = Color(0xff64748b), outlineVariant = Color(0xffcbd5d0)
             )
             dark -> darkColorScheme(primary = Color(0xffa8c9b7))
             else -> lightColorScheme(primary = Color(0xff315b49))
         }
-        val panelOpen = selected != null || settings || mapOptions || picking || reviewingImport || draft != null
-        val needsBackdrop = panelOpen
+        val panelOpen = selected != null || settings || mapOptions || placesSheet || picking || reviewingImport || draft != null
+        val needsBackdrop = selected != null || settings || mapOptions || placesSheet || reviewingImport || draft != null
         var backdrop by remember { mutableStateOf<ImageBitmap?>(null) }
         LaunchedEffect(panelOpen, needsBackdrop) {
             if (panelOpen) engine.stopGlobeSpin()
@@ -334,26 +339,26 @@ class MainActivity : ComponentActivity() {
                     Box(
                         Modifier
                             .align(Alignment.Center)
-                            .size(56.dp),
+                            .size(44.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
                             Modifier
-                                .size(48.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.58f))
-                                .border(1.8.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.85f), CircleShape),
+                                .border(2.dp, Color.White.copy(alpha = 0.85f), CircleShape)
+                                .border(1.2.dp, MaterialTheme.colorScheme.primary, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.CROSSHAIR, tint = MaterialTheme.colorScheme.primary, size = 26.dp)
+                            cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.CROSSHAIR, tint = MaterialTheme.colorScheme.primary, size = 24.dp)
                         }
                     }
-                    FrostedPanel(Modifier.align(Alignment.BottomCenter).padding(16.dp).widthIn(max=480.dp).fillMaxWidth(),shape=RoundedCornerShape(28.dp),elevation=10.dp) {
-                        Column(Modifier.padding(18.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                            Text("移动地图，将拍摄位置对准准星",textAlign=TextAlign.Center,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
-                            Text(pickHint.ifBlank {"正在读取位置"},textAlign=TextAlign.Center,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=Alignment.CenterVertically) {
-                                OutlinedButton(onClick=::finishPicking,shape=RoundedCornerShape(18.dp),modifier=Modifier.weight(1f).height(48.dp)) {Text("取消")}
+                    FrostedPanel(Modifier.align(Alignment.BottomCenter).imePadding().padding(14.dp).widthIn(max=480.dp).fillMaxWidth(),shape=RoundedCornerShape(26.dp),elevation=12.dp) {
+                        Column(Modifier.padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Text("拖动地图，将拍摄点对准中心准星",textAlign=TextAlign.Center,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
+                            Text(pickHint.ifBlank {"正在读取位置…"},textAlign=TextAlign.Center,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
+                                OutlinedButton(onClick=::finishPicking,shape=RoundedCornerShape(18.dp),modifier=Modifier.weight(1f).height(46.dp)) {Text("取消")}
                                 Button(onClick={
                                 if(!engine.canPick) {message(if (BuildConfig.ONLINE_MAPS) "请选择有效的地图位置" else "请选择中国范围内的位置");return@Button}
                                 val p=engine.center
@@ -371,13 +376,13 @@ class MainActivity : ComponentActivity() {
                                 } else if(adjusting) {draft?.latitude=p.latitude;draft?.longitude=p.longitude}
                                 else draft=Draft(null,null,placeName,p.latitude,p.longitude)
                                 finishPicking()
-                            },enabled=pickAllowed && !busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.weight(1.6f).height(48.dp)) {Text("确定位置",fontWeight=FontWeight.SemiBold)} }
+                            },enabled=pickAllowed && !busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.weight(1.6f).height(46.dp)) {Text("确定位置",fontWeight=FontWeight.SemiBold)} }
                         }
                     }
                 } else if (BuildConfig.ONLINE_MAPS) {
                     OnlineMapChrome(
                         places.size, places.sumOf { it.photoCount }, pending.size, mapInfo,
-                        !busy, { mapOptions = true }, { settings = true }, { engine.national() },
+                        !busy, { placesSheet = true }, { mapOptions = true }, { settings = true }, { engine.national() },
                         ::startPicking, ::beginDirectImport, ::openMemories
                     )
                 } else {
@@ -485,12 +490,32 @@ class MainActivity : ComponentActivity() {
                                             Text(record.title.ifBlank {"摄影记录"},style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold);Text(record.date,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
                                         }
                                         if(record.note.isNotBlank()) Text(record.note,modifier=Modifier.padding(vertical=4.dp), style = MaterialTheme.typography.bodyMedium)
-                                        LazyRow(horizontalArrangement=Arrangement.spacedBy(10.dp)) {items(record.photos,key={it.id}) {photo->
-                                            val thumbShape = RoundedCornerShape(16.dp)
-                                            AsyncImage(library.file(photo.thumbnail),contentDescription=photo.title.ifBlank {photo.filename},contentScale=ContentScale.Crop,modifier=Modifier.size(132.dp).clip(thumbShape).border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), thumbShape).clickable {
-                                                memoryViewer=false;viewer=records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}};viewerPage=viewer.indexOfFirst {it.photo.id==photo.id}
-                                            })
-                                        }}
+                                        if (record.photos.size == 1) {
+                                            val photo = record.photos.first()
+                                            val heroShape = RoundedCornerShape(18.dp)
+                                            AsyncImage(
+                                                library.file(photo.original),
+                                                contentDescription = photo.title.ifBlank { photo.filename },
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(204.dp)
+                                                    .clip(heroShape)
+                                                    .border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), heroShape)
+                                                    .clickable {
+                                                        memoryViewer = false
+                                                        viewer = records.flatMap { r -> r.photos.map { ViewedPhoto(it, r) } }
+                                                        viewerPage = viewer.indexOfFirst { it.photo.id == photo.id }
+                                                    }
+                                            )
+                                        } else {
+                                            LazyRow(horizontalArrangement=Arrangement.spacedBy(10.dp)) {items(record.photos,key={it.id}) {photo->
+                                                val thumbShape = RoundedCornerShape(16.dp)
+                                                AsyncImage(library.file(photo.thumbnail),contentDescription=photo.title.ifBlank {photo.filename},contentScale=ContentScale.Crop,modifier=Modifier.size(144.dp).clip(thumbShape).border(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), thumbShape).clickable {
+                                                    memoryViewer=false;viewer=records.flatMap {r->r.photos.map {ViewedPhoto(it,r)}};viewerPage=viewer.indexOfFirst {it.photo.id==photo.id}
+                                                })
+                                            }}
+                                        }
                                         if (!BuildConfig.ONLINE_MAPS) {
                                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {TextButton(onClick=edit,enabled=!busy) {Text("编辑记录 / 地点")};TextButton(onClick=remove,enabled=!busy) {Text("删除记录",color=MaterialTheme.colorScheme.error)}}
                                         }
@@ -505,12 +530,22 @@ class MainActivity : ComponentActivity() {
                     val current=draft!!; work("正在移除未保存照片") {library.discard(listOf(photo));current.added.remove(photo)}
                 },::saveDraft)
                 memoryDays?.let { days ->
-                    Memories(days, memoryToday.minusYears(1), dark, library, { memoryDays = null }) { day, index ->
-                        memoryViewer = true
-                        memoryDay = day.date
-                        viewer = day.photos.map { ViewedPhoto(it.photo, it.record) }
-                        viewerPage = index
-                    }
+                    Memories(
+                        days, memoryToday.minusYears(1), dark, library, { memoryDays = null },
+                        onOpen = { day, index ->
+                            memoryViewer = true
+                            memoryDay = day.date
+                            viewer = day.photos.map { ViewedPhoto(it.photo, it.record) }
+                            viewerPage = index
+                        },
+                        onLocate = { locationId ->
+                            memoryDays = null
+                            places.firstOrNull { it.id == locationId }?.let { place ->
+                                engine.focus(place.latitude, place.longitude)
+                                select(place)
+                            }
+                        }
+                    )
                 }
                 if (reviewingImport && !picking && pending.isNotEmpty()) {
                     val current = pending[pendingIndex]
@@ -556,26 +591,28 @@ class MainActivity : ComponentActivity() {
                         }
                     }},confirmButton={TextButton(onClick={work("正在保存照片文字") {library.editPhoto(photo,title,note,date,parameters,camera.takeIf { BuildConfig.ONLINE_MAPS });editingPhoto=null;reload()}},enabled=!busy && (date.isBlank() || runCatching {LocalDate.parse(date)}.isSuccess)) {Text("保存",fontWeight=FontWeight.SemiBold)}},dismissButton={TextButton(onClick={editingPhoto=null},enabled=!busy) {Text("取消")}})
                 }
+                if(placesSheet) PlacesListSheet()
                 if(settings) SettingsSheet(dark)
                 if(mapOptions) MapPanelSheet(onDismissRequest={mapOptions=false},opaque=false) {
-                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start=20.dp,end=20.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.LAYERS, tint = MaterialTheme.colorScheme.primary, size = 22.dp)
-                            Text("选择底图",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start=18.dp,end=18.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.LAYERS, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
+                                Text("底图与视图",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                            }
+                            if (BuildConfig.ONLINE_MAPS) {
+                                TextButton(onClick = ::openMapSources, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                                    Text("数据许可", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
                         }
                         BasemapChoices()
-                        Text(if(BuildConfig.ONLINE_MAPS) {
-                            val overview = if (engine.hasOnlineOverview) "全球概览保存在本机。放大后按需极速加载并缓存高清细节。" else "按视野加载并缓存地图。"
-                            overview + "照片、EXIF 和作品保存在本机。"
-                        } else "切换不联网。请先在数据中一次性导入全国精细包：全国街道最高 Z15，1995 个建成区配有约 10 米卫星影像；城区索引之外的影像为概览。影像拍摄于 2016 年，不是实时画面。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        if(mapInfo.isNotBlank()) Text(mapInfo,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        if (BuildConfig.ONLINE_MAPS) {
-                            Text("地图数据 © OpenStreetMap 贡献者 · OpenMapTiles · OpenFreeMap · Protomaps · 高德 · 必应卫星 (EdgeOne) · Esri World Imagery · EOX。地点搜索由 Android 系统服务和 Photon 提供。",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            TextButton(onClick = ::openMapSources) { Text("地图来源与许可") }
+                        if(mapInfo.isNotBlank()) {
+                            Text(mapInfo,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp))
                         }
-                        TextButton(onClick={mapOptions=false;settings=true}) {Text(if(BuildConfig.ONLINE_MAPS) "查看地图来源与缓存" else "查看地图数据与导入增强包")}
-                        Button(onClick={mapOptions=false},shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("完成",fontWeight=FontWeight.SemiBold)}
+                        Text(if(BuildConfig.ONLINE_MAPS) {
+                            "© OpenStreetMap · OpenFreeMap · Protomaps · 高德 · 必应国内节点 · EOX。照片与作品仅保存于本机。"
+                        } else "切换不联网。离线包可在设置中导入管理。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
                 if(licenseText.isNotBlank()) AlertDialog(onDismissRequest={licenseText=""},shape=RoundedCornerShape(28.dp),title={Text("地图来源与许可",fontWeight=FontWeight.SemiBold)},text={SelectionContainer {Text(licenseText,Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),style=MaterialTheme.typography.bodySmall)}},confirmButton={TextButton(onClick={licenseText=""}) {Text("关闭")}})
@@ -587,32 +624,156 @@ class MainActivity : ComponentActivity() {
     }
     fun chooseBasemap(mode:BasemapMode) {basemapMode=mode;engine.basemap(mode)}
     @OptIn(ExperimentalMaterial3Api::class)
-    @Composable private fun BasemapChoices() {
-        BasemapMode.entries.forEach {mode->
-            val isSelected = basemapMode == mode
-            LiquidGlassCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                selected = isSelected,
-                onClick = { chooseBasemap(mode) }
-            ) {
-                Row(Modifier.padding(14.dp),verticalAlignment=Alignment.CenterVertically) {
-                    RadioButton(
-                        selected=isSelected,
-                        onClick={chooseBasemap(mode)},
-                        colors=RadioButtonDefaults.colors(
-                            selectedColor = MaterialTheme.colorScheme.primary,
-                            unselectedColor = MaterialTheme.colorScheme.onSurfaceVariant
+    @Composable private fun PlacesListSheet() {
+        val sortedPlaces = remember(places) { places.sortedByDescending { it.photoCount } }
+        MapPanelSheet(onDismissRequest = { placesSheet = false }, skipPartiallyExpanded = false, opaque = false) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.MAP_PIN, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
+                        Text("我的足迹", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                    ) {
+                        Text(
+                            "${places.size} 地点 · ${places.sumOf { it.photoCount }} 张",
+                            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            fontWeight = FontWeight.SemiBold
                         )
-                    )
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(mode.title,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
-                        Text(if(BuildConfig.ONLINE_MAPS && mode==BasemapMode.SATELLITE) "全球国内 CDN 免 VPN 秒开：境内高德（已校正到 WGS-84），海外必应国内节点；可叠加街道" else mode.description,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (sortedPlaces.isEmpty()) {
+                    LiquidGlassCard(Modifier.fillMaxWidth().padding(bottom = 28.dp), shape = RoundedCornerShape(22.dp)) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.CAMERA_PLUS, tint = MaterialTheme.colorScheme.primary, size = 28.dp)
+                            Text("还没有点亮任何足迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            Text("导入带有 GPS 的照片，或在地图上选点，即可点亮你的摄影地图。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                            Button(
+                                onClick = { placesSheet = false; beginDirectImport() },
+                                shape = RoundedCornerShape(18.dp)
+                            ) { Text("导入第一张照片", fontWeight = FontWeight.SemiBold) }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        Modifier.fillMaxWidth().weight(1f, false),
+                        contentPadding = PaddingValues(bottom = 28.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(sortedPlaces, key = { it.id }) { place ->
+                            val cleanName = if (place.name.matches(Regex("""拍摄地点 -?\d+\.\d+, -?\d+\.\d+"""))) "拍摄地点" else place.name
+                            LiquidGlassCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp),
+                                onClick = {
+                                    placesSheet = false
+                                    engine.focus(place.latitude, place.longitude)
+                                    select(place)
+                                }
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    AsyncImage(
+                                        library.file(place.cover.thumbnail),
+                                        contentDescription = cleanName,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(54.dp).clip(RoundedCornerShape(14.dp))
+                                    )
+                                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(cleanName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                        Text(
+                                            "${place.photoCount} 张照片 · %.3f, %.3f".format(place.latitude, place.longitude),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.CHEVRON_RIGHT, tint = MaterialTheme.colorScheme.onSurfaceVariant, size = 16.dp)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
-        if(basemapMode==BasemapMode.SATELLITE) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+    }
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable private fun BasemapChoices() {
+        val shortTitle = mapOf(
+            BasemapMode.SIMPLE to "简洁",
+            BasemapMode.STREETS to "街道",
+            BasemapMode.SATELLITE to "卫星"
+        )
+        val iconFor = mapOf(
+            BasemapMode.SIMPLE to cn.photomap.ui.AppIconType.SPARKLES,
+            BasemapMode.STREETS to cn.photomap.ui.AppIconType.MAP_PIN,
+            BasemapMode.SATELLITE to cn.photomap.ui.AppIconType.GLOBE
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            BasemapMode.entries.forEach { mode ->
+                val isSelected = basemapMode == mode
+                LiquidGlassCard(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(20.dp),
+                    selected = isSelected,
+                    onClick = { chooseBasemap(mode) }
+                ) {
+                    Column(
+                        Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            cn.photomap.ui.AppIcon(
+                                iconFor[mode] ?: cn.photomap.ui.AppIconType.LAYERS,
+                                tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                size = 18.dp
+                            )
+                        }
+                        Text(
+                            shortTitle[mode] ?: mode.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            if (BuildConfig.ONLINE_MAPS && basemapMode == BasemapMode.SATELLITE)
+                "全球国内 CDN 免 VPN 秒开：境内高德（WGS-84 实时纠偏），海外必应国内节点"
+            else basemapMode.description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        if(basemapMode==BasemapMode.SATELLITE) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text("叠加道路与地名",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium,color=MaterialTheme.colorScheme.onSurface)
                 Switch(
@@ -627,11 +788,11 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        if(BuildConfig.ONLINE_MAPS) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+        if(BuildConfig.ONLINE_MAPS) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("实时地球昼夜晨昏线",style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
-                    Text("根据当前时间与太阳直射点，实时渲染地球向阳面与夜半球",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("根据当前时间与太阳直射点，实时渲染昼夜半球",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(8.dp))
                 Switch(
@@ -650,22 +811,28 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable private fun SettingsSheet(dark: Boolean) {
         MapPanelSheet(onDismissRequest={if(!busy) settings=false},opaque=false) {
-            LazyColumn(Modifier.fillMaxWidth().padding(horizontal=20.dp),contentPadding=PaddingValues(bottom=40.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
+            LazyColumn(Modifier.fillMaxWidth().padding(horizontal=18.dp),contentPadding=PaddingValues(bottom=32.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
                 item {
-                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.SLIDERS, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
+                        Text("设置与数据",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                    }
+                }
+                item {
+                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.DATABASE, tint = MaterialTheme.colorScheme.primary, size = 20.dp)
-                                Text("本地数据与备份",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                                cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.DATABASE, tint = MaterialTheme.colorScheme.primary, size = 18.dp)
+                                Text("本地数据与备份",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
                             }
-                            Text("${places.size} 个地点 / ${places.sumOf {it.photoCount}} 张原图，全部保存在应用私有目录。卸载会清除作品，请先备份。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("${places.size} 个地点 / ${places.sumOf {it.photoCount}} 张原图，全部保存在本机私有目录。卸载会清除作品，请定期备份。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             if(busy) {LinearProgressIndicator(Modifier.fillMaxWidth());Text(progress,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurface)}
                             if(lastMessage.isNotBlank()) Text(lastMessage,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.primary)
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(
                                     onClick={launchSystemPicker {backup.launch("留影-${LocalDate.now()}.zip")}},
                                     enabled=!busy,
-                                    shape=RoundedCornerShape(18.dp),
+                                    shape=RoundedCornerShape(16.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                     modifier=Modifier.weight(1.12f).heightIn(min=46.dp)
                                 ) {
@@ -674,7 +841,7 @@ class MainActivity : ComponentActivity() {
                                 OutlinedButton(
                                     onClick={launchSystemPicker {restore.launch(arrayOf("application/zip","application/octet-stream"))}},
                                     enabled=!busy,
-                                    shape=RoundedCornerShape(18.dp),
+                                    shape=RoundedCornerShape(16.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                                     modifier=Modifier.weight(1f).heightIn(min=46.dp)
                                 ) {
@@ -685,9 +852,9 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 item {
-                    Text("外观主题",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
+                    Text("外观主题",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(horizontal = 4.dp))
                     Spacer(Modifier.height(6.dp))
-                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                         Row(Modifier.fillMaxWidth().padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf("跟随系统","浅色","深色").forEachIndexed {index,label->
                                 val selectedTheme = themeChoice == index
@@ -714,14 +881,27 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                item {HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f));Spacer(Modifier.height(4.dp));Text(if(BuildConfig.ONLINE_MAPS) "地图与缓存" else "离线地图",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface);Spacer(Modifier.height(6.dp));Column(verticalArrangement=Arrangement.spacedBy(8.dp)){BasemapChoices()};Spacer(Modifier.height(6.dp));Text(mapStatus,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(if(BuildConfig.ONLINE_MAPS) "地图服务可获知请求区域及 IP。地点搜索使用 Android 系统服务或 Photon，仅提交你输入的地名。照片、EXIF、地点记录和备份均保存在本机。已浏览区域自动缓存。" else "APK 内置基础概览。一次导入全国精细包后，全国街道统一最高 Z15；当前地图中心进入覆盖区时自动使用。放大超过原始数据精度不会增加细节。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                if(!BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={launchSystemPicker {importMap.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("导入离线地图包（全国 / 地区）")}}
-                if(BuildConfig.ONLINE_MAPS) item {OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存（保留照片）")}}
-                item {TextButton(onClick=::openMapSources,enabled=!busy) {Text(if(BuildConfig.ONLINE_MAPS) "查看地图来源与许可" else "查看地图来源与许可（离线）")}}
+                item {
+                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(if(BuildConfig.ONLINE_MAPS) "地图缓存" else "离线地图",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                            Text(mapStatus,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            if(!BuildConfig.ONLINE_MAPS) {
+                                OutlinedButton(onClick={launchSystemPicker {importMap.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,shape=RoundedCornerShape(16.dp),modifier=Modifier.fillMaxWidth()) {Text("导入离线地图包（全国 / 地区）")}
+                            } else {
+                                OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,shape=RoundedCornerShape(16.dp),modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存（保留照片）")}
+                            }
+                        }
+                    }
+                }
                 items(maps,key={it.directory.name}) { map->Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {Column(Modifier.weight(1f)) {Text(map.name,color=MaterialTheme.colorScheme.onSurface);Text("Z${map.minZoom.toInt()}–${map.maxZoom.toInt()}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)};TextButton(onClick={confirmation="移除地区地图包？摄影记录不受影响。" to {work("正在移除地图包") {packages.remove(map);maps=withContext(Dispatchers.IO) {packages.list()};engine.reloadPackages()}}},enabled=!busy) {Text("移除")}}}
-                item {TextButton(onClick={launchSystemPicker {diagnosticExport.launch("PhotoMap-startup.txt")}}) {Text("导出启动故障报告")}}
-                item {Text(if(BuildConfig.ONLINE_MAPS) "本版不需要导入全国地图包，可与离线版同时安装。两版作品分别保存在各自私有目录，可通过完整备份 ZIP 互相迁移。" else "全国精细包同时包含全国 Z15 街道、建筑与景点，以及城区精细卫星影像。全部数据保存在本机；导入前自动检查可用空间并校验完整性，成功后可删除原 ZIP。景点和路名完整度仍受上游数据限制。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
-                item {Text("留影 ${BuildConfig.VERSION_NAME} · 无账号、无云同步、无广告。地图数据署名请见上方，数据来源与许可随 APK 保留。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        TextButton(onClick=::openMapSources,enabled=!busy) {Text("地图来源与许可")}
+                        TextButton(onClick={launchSystemPicker {diagnosticExport.launch("PhotoMap-startup.txt")}}) {Text("导出故障报告")}
+                    }
+                    Text("留影 ${BuildConfig.VERSION_NAME} · 无账号、无云同步、无广告。全部照片与记录仅保存在本机。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
+                }
             }
         }
     }

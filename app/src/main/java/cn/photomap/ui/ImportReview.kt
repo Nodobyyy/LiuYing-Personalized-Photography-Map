@@ -11,8 +11,11 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -24,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import cn.photomap.data.Library
 import cn.photomap.data.Photo
@@ -42,10 +46,11 @@ data class PendingPhoto(
     val placeName: String = ""
 ) {
     val hasDate get() = runCatching { LocalDate.parse(date) }.isSuccess
+    val isReady get() = hasDate && point?.inCoverage == true
     fun placement(): PhotoPlacement? {
-        if (!hasDate || point?.inCoverage != true) return null
+        if (!isReady) return null
         val exif = if (camera.isEmpty()) photo.exif else JSONObject(photo.exif).withCameraOverrides(camera).toString()
-        return PhotoPlacement(photo.copy(date = date, exif = exif), point, placeName)
+        return PhotoPlacement(photo.copy(date = date, exif = exif), point!!, placeName)
     }
 }
 
@@ -67,11 +72,14 @@ fun ImportReview(
 ) {
     val item = pending.getOrNull(index) ?: return
     var showCamera by remember(item.photo.id) { mutableStateOf(false) }
-    val ready = pending.count { it.hasDate && it.point?.inCoverage == true }
+    var showDatePicker by remember { mutableStateOf(false) }
+    val ready = pending.count { it.isReady }
     val colors = MaterialTheme.colorScheme
-    FullScreenDialog(onDismiss = { if (!busy) onDismiss() }, dark = dark) {
+
+    FullScreenDialog(onDismiss = { if (!busy) onDismiss() }, dark = dark, compactTop = true) {
         EditorPanel {
-            Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+            Column(Modifier.fillMaxSize().imePadding()) {
+                // Top Bar
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -89,69 +97,180 @@ fun ImportReview(
                             Text("返回", fontWeight = FontWeight.SemiBold)
                         }
                     }
-                    Text("补填导入信息", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Column(Modifier.weight(1f)) {
+                        Text("补填导入信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "共 ${pending.size} 张 · $ready 张已就绪",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.primary
+                        )
+                    }
                 }
+
+                // Filmstrip thumbnail selector for instant switching between pending photos
+                if (pending.size > 1) {
+                    LazyRow(
+                        Modifier.fillMaxWidth().padding(bottom = 10.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(pending.size, key = { pending[it].photo.id }) { i ->
+                            val entry = pending[i]
+                            val isCurrent = i == index
+                            val shape = RoundedCornerShape(14.dp)
+                            Box(
+                                Modifier
+                                    .size(58.dp)
+                                    .clip(shape)
+                                    .border(
+                                        width = if (isCurrent) 2.2.dp else 1.dp,
+                                        color = if (isCurrent) colors.primary else colors.outlineVariant.copy(alpha = 0.45f),
+                                        shape = shape
+                                    )
+                                    .clickable(enabled = !busy) { onSelect(i) }
+                            ) {
+                                AsyncImage(
+                                    library.file(entry.photo.thumbnail),
+                                    contentDescription = entry.photo.filename,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                // Ready / Pending indicator dot
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(4.dp)
+                                        .size(16.dp)
+                                        .clip(CircleShape)
+                                        .background(if (entry.isReady) Color(0xFF10B981) else Color(0xFFF59E0B)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (entry.isReady) {
+                                        AppIcon(AppIconType.CHECK, tint = Color.White, size = 10.dp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Column(
-                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp)) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("照片 ${index + 1} / ${pending.size} · $ready 张可保存", style = MaterialTheme.typography.labelLarge, color = colors.primary)
-                            val previewShape = RoundedCornerShape(20.dp)
+                    // Photo Preview Card
+                    LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp)) {
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            val previewShape = RoundedCornerShape(18.dp)
                             Box(
                                 Modifier
                                     .fillMaxWidth()
-                                    .height(176.dp)
+                                    .height(172.dp)
                                     .clip(previewShape)
-                                    .background(Color(0xff1c2423))
-                                    .border(0.8.dp, colors.outlineVariant.copy(alpha = 0.5f), previewShape),
+                                    .background(Color(0xff141c1e))
+                                    .border(0.8.dp, colors.outlineVariant.copy(alpha = 0.45f), previewShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 AsyncImage(
                                     library.file(item.photo.thumbnail), null, contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize().blur(24.dp)
                                 )
-                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)))
+                                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.28f)))
                                 AsyncImage(
                                     library.file(item.photo.thumbnail), item.photo.filename, contentScale = ContentScale.Fit,
-                                    modifier = Modifier.fillMaxSize().padding(8.dp)
+                                    modifier = Modifier.fillMaxSize().padding(6.dp)
                                 )
                             }
-                            Text(item.photo.filename, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                OutlinedButton(onClick = { onSelect(index - 1) }, enabled = index > 0 && !busy, shape = RoundedCornerShape(16.dp)) { Text("上一张") }
-                                OutlinedButton(onClick = { onSelect(index + 1) }, enabled = index < pending.lastIndex && !busy, shape = RoundedCornerShape(16.dp)) { Text("下一张") }
-                            }
+                            Text(
+                                item.photo.filename,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
+
+                    // Form Card: Date + Location + Camera EXIF
                     LiquidGlassCard(
                         Modifier.fillMaxWidth().animateContentSize(spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)),
-                        shape = RoundedCornerShape(26.dp)
+                        shape = RoundedCornerShape(24.dp)
                     ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             OutlinedTextField(
-                                item.date, { onChange(item.copy(date = it.take(10))) }, Modifier.fillMaxWidth(),
-                                label = { Text("拍摄日期 YYYY-MM-DD") }, singleLine = true, enabled = !busy,
-                                shape = RoundedCornerShape(18.dp),
-                                isError = item.date.isNotBlank() && !item.hasDate
+                                item.date,
+                                { onChange(item.copy(date = it.take(10))) },
+                                Modifier.fillMaxWidth(),
+                                label = { Text("拍摄日期") },
+                                placeholder = { Text("YYYY-MM-DD") },
+                                singleLine = true,
+                                enabled = !busy,
+                                shape = RoundedCornerShape(16.dp),
+                                isError = item.date.isNotBlank() && !item.hasDate,
+                                trailingIcon = {
+                                    IconButton(onClick = { showDatePicker = true }, enabled = !busy) {
+                                        AppIcon(AppIconType.CALENDAR, tint = colors.primary, size = 18.dp)
+                                    }
+                                }
                             )
                             if (pending.size > 1 && item.hasDate) {
-                                TextButton(onClick = onApplyDate, enabled = !busy) { Text("为其他缺日期的照片使用此日期") }
+                                FilledTonalButton(
+                                    onClick = onApplyDate,
+                                    enabled = !busy,
+                                    shape = RoundedCornerShape(14.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("将此日期应用到其余缺日期照片", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
-                            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.4f))
-                            Text(
-                                item.point?.let { "拍摄位置 %.5f, %.5f".format(it.latitude, it.longitude) }
-                                    ?: "没有可用的 GPS，请在地图上选择位置。",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            OutlinedButton(onClick = onPick, enabled = !busy, shape = RoundedCornerShape(18.dp)) { Text("地图选点") }
+
+                            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.35f))
+
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        if (item.point != null) item.placeName.ifBlank { "已选择位置" } else "缺少拍摄位置",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (item.point != null) colors.onSurface else colors.error
+                                    )
+                                    Text(
+                                        item.point?.let { "%.5f, %.5f".format(it.latitude, it.longitude) }
+                                            ?: "点击右侧按钮在地图上标记拍摄点",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colors.onSurfaceVariant
+                                    )
+                                }
+                                FilledTonalButton(
+                                    onClick = onPick,
+                                    enabled = !busy,
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    AppIcon(AppIconType.CROSSHAIR, tint = colors.primary, size = 16.dp)
+                                    Spacer(Modifier.width(5.dp))
+                                    Text("选点", fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
                             if (pending.size > 1 && item.point != null) {
-                                TextButton(onClick = onApplyPoint, enabled = !busy) { Text("为其他缺位置的照片使用此位置") }
+                                FilledTonalButton(
+                                    onClick = onApplyPoint,
+                                    enabled = !busy,
+                                    shape = RoundedCornerShape(14.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("将此位置应用到其余缺位置照片", style = MaterialTheme.typography.labelMedium)
+                                }
                             }
-                            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.4f))
+
+                            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.35f))
+
                             TextButton(onClick = { showCamera = !showCamera }, enabled = !busy) {
-                                Text(if (showCamera) "收起相机参数" else "补填或更正相机参数")
+                                Text(if (showCamera) "收起相机参数" else "补填或更正相机参数（可选）")
                             }
                             AnimatedVisibility(
                                 visible = showCamera,
@@ -164,30 +283,43 @@ fun ImportReview(
                             }
                         }
                     }
-                    Text("原图保持原样。待补填照片可在本次运行中继续处理。", style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
                 }
+
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+
+                // Bottom Action Bar
                 FrostedPanel(
                     Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                     shape = RoundedCornerShape(24.dp),
                     elevation = 6.dp
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.weight(1f)) { Text("放弃待补填") }
+                        TextButton(onClick = onDiscard, enabled = !busy, modifier = Modifier.weight(0.9f)) {
+                            Text("放弃", color = colors.error)
+                        }
                         Button(
                             onClick = onSave,
                             enabled = ready > 0 && !busy,
-                            modifier = Modifier.weight(1.3f),
+                            modifier = Modifier.weight(1.4f).height(46.dp),
                             shape = RoundedCornerShape(18.dp)
-                        ) { Text("保存 $ready 张", fontWeight = FontWeight.SemiBold) }
+                        ) {
+                            Text("保存已就绪的 $ready 张", fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
         }
     }
-}
 
+    if (showDatePicker) {
+        PhotoDatePickerDialog(
+            initialDate = item.date,
+            onDismiss = { showDatePicker = false },
+            onPicked = { onChange(item.copy(date = it)) }
+        )
+    }
+}
