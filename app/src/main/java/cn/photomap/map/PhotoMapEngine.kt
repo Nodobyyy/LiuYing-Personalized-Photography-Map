@@ -13,6 +13,7 @@ import cn.photomap.core.MapViewport
 import cn.photomap.data.Library
 import cn.photomap.data.Place
 import kotlinx.coroutines.*
+import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -284,10 +285,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             }
         }
         if(basemapMode==BasemapMode.SATELLITE) {
-            // In online mode, remove the overseas OpenFreeMap vector source ("base") when viewing satellite imagery
-            // so that MapLibre never wastes bandwidth or connections fetching slow foreign vector tiles.
-            // Bundled offline PMTiles ("overview" & "context*") provide instant local roads and place labels!
-            if (BuildConfig.ONLINE_MAPS && hasOnlineOverview) {
+            if (BuildConfig.ONLINE_MAPS && !satelliteLabels) {
                 json.optJSONObject("sources")?.remove("base")
             }
             val layers=json.getJSONArray("layers")
@@ -295,12 +293,21 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             for(i in 0 until layers.length()) {
                 val layer=layers.getJSONObject(i)
                 val source = layer.optString("source")
-                if (BuildConfig.ONLINE_MAPS && hasOnlineOverview && source == "base") continue
+                if (BuildConfig.ONLINE_MAPS && !satelliteLabels && source == "base") continue
                 val paint=layer.optJSONObject("paint")
                 if (paint != null) {
                     if(layer.optString("id")=="china-display-mask") paint.put("fill-color","#19303d")
-                    if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.0)
+                    if(layer.optString("type")=="symbol") paint.put("text-color","#ffffff").put("text-halo-color","#172b32").put("text-halo-width",1.8)
                     if(layer.optString("id").startsWith("china-") && layer.optString("type")=="line") paint.put("line-color","#dbe4cc")
+                    if (BuildConfig.ONLINE_MAPS && layer.optString("type") == "line" &&
+                        layer.optString("source-layer") == "roads" && (source == "overview" || source.startsWith("context"))
+                    ) {
+                        // Coarse geometries diverge from the imagery when overzoomed.
+                        val end = if (source == "overview") 10.0 else 8.0
+                        if (layer.optDouble("minzoom", 0.0) >= end) continue
+                        layer.put("maxzoom", minOf(layer.optDouble("maxzoom", end), end))
+                        paint.put("line-opacity", JSONArray("""["interpolate",["linear"],["zoom"],${end - 2},0.35,$end,0]"""))
+                    }
                 }
                 val vectorSource = source == "base" || (BuildConfig.ONLINE_MAPS && (source == "overview" || source.startsWith("context")))
                 if(!satelliteLabels && (layer.optString("type")=="symbol" || vectorSource)) layer.put("layout",(layer.optJSONObject("layout")?:JSONObject()).put("visibility","none"))

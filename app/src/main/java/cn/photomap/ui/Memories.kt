@@ -36,7 +36,6 @@ import kotlin.math.absoluteValue
 fun Memories(
     days: List<PhotoDay>,
     anniversary: LocalDate,
-    dark: Boolean,
     library: Library,
     onClose: () -> Unit,
     onOpen: (PhotoDay, Int) -> Unit,
@@ -48,7 +47,7 @@ fun Memories(
     val pager = rememberPagerState(initialPage = anchor) { timeline.size }
 
     val colors = MaterialTheme.colorScheme
-    FullScreenDialog(onDismiss = onClose, dark = dark, background = colors.surface) {
+    FullScreenPage(title = "忆往昔", background = colors.surface, onClose = onClose) {
         Column(
             Modifier
                 .fillMaxSize()

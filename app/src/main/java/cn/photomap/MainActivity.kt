@@ -257,10 +257,11 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable private fun Content() {
         val dark=themeChoice==2 || (themeChoice==0 && isSystemInDarkTheme())
-        val lightIcons = dark || basemapMode == BasemapMode.SATELLITE
-        LaunchedEffect(dark, lightIcons) {
+        val darkNavigation = dark || viewer.isNotEmpty()
+        val lightIcons = darkNavigation || (memoryDays == null && basemapMode == BasemapMode.SATELLITE)
+        LaunchedEffect(darkNavigation, lightIcons) {
             val status=if(lightIcons) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) else SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT)
-            val nav=if(dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) else SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT)
+            val nav=if(darkNavigation) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT) else SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT)
             enableEdgeToEdge(statusBarStyle=status,navigationBarStyle=nav)
             // Android 10+ may add a translucent contrast scrim behind transparent bars; disable it for true immersion.
             if (android.os.Build.VERSION.SDK_INT >= 29) {
@@ -407,7 +408,7 @@ class MainActivity : ComponentActivity() {
                     Column(Modifier.padding(28.dp),horizontalAlignment=Alignment.CenterHorizontally) {CircularProgressIndicator();Spacer(Modifier.height(14.dp));Text(progress, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)}
                 }
                 BackHandler(enabled=picking, onBack=::finishPicking)
-                if(selected!=null && draft==null && !picking && !settings) {
+                if(selected!=null && draft==null && !picking && !settings && viewer.isEmpty() && memoryDays == null) {
                     val place=selected!!
                     MapPanelSheet(onDismissRequest={if(!busy) closePlace()},skipPartiallyExpanded=false) {
                         LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(start=20.dp,end=20.dp,bottom=32.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -529,24 +530,6 @@ class MainActivity : ComponentActivity() {
                 if(draft!=null && !picking) RecordEditor(draft!!,library,busy,::cancelDraft,{launchSystemPicker {photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))}},{adjusting=true;picking=true;engine.picking=true;draft?.let {engine.focus(it.latitude,it.longitude)}},{photo->
                     val current=draft!!; work("正在移除未保存照片") {library.discard(listOf(photo));current.added.remove(photo)}
                 },::saveDraft)
-                memoryDays?.let { days ->
-                    Memories(
-                        days, memoryToday.minusYears(1), dark, library, { memoryDays = null },
-                        onOpen = { day, index ->
-                            memoryViewer = true
-                            memoryDay = day.date
-                            viewer = day.photos.map { ViewedPhoto(it.photo, it.record) }
-                            viewerPage = index
-                        },
-                        onLocate = { locationId ->
-                            memoryDays = null
-                            places.firstOrNull { it.id == locationId }?.let { place ->
-                                closePlace()
-                                engine.focus(place.latitude, place.longitude)
-                            }
-                        }
-                    )
-                }
                 if (reviewingImport && !picking && pending.isNotEmpty()) {
                     val current = pending[pendingIndex]
                     ImportReview(pending, pendingIndex, busy, dark, library, { pendingIndex = it }, ::changePending,
@@ -572,7 +555,6 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
-                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList();memoryViewer=false},{editingPhoto=it},{photo->confirmation="删除应用内照片？系统相册原图会保留，空记录和空地点会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
                 if(editingPhoto!=null) {
                     val photo=editingPhoto!!
                     var title by remember(photo.id) {mutableStateOf(photo.title)};var note by remember(photo.id) {mutableStateOf(photo.note)};var date by remember(photo.id) {mutableStateOf(photo.date)}
@@ -618,6 +600,25 @@ class MainActivity : ComponentActivity() {
                 if(licenseText.isNotBlank()) AlertDialog(onDismissRequest={licenseText=""},shape=RoundedCornerShape(28.dp),title={Text("地图来源与许可",fontWeight=FontWeight.SemiBold)},text={SelectionContainer {Text(licenseText,Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),style=MaterialTheme.typography.bodySmall)}},confirmButton={TextButton(onClick={licenseText=""}) {Text("关闭")}})
                 confirmation?.let { (text,action)->AlertDialog(onDismissRequest={confirmation=null},shape=RoundedCornerShape(28.dp),title={Text("请确认",fontWeight=FontWeight.SemiBold)},text={Text(text)},confirmButton={TextButton(onClick={confirmation=null;action()},enabled=!busy) {Text("确定",fontWeight=FontWeight.SemiBold)}},dismissButton={TextButton(onClick={confirmation=null}) {Text("取消")}}) }
             }
+                memoryDays?.let { days ->
+                    Memories(
+                        days, memoryToday.minusYears(1), library, { memoryDays = null },
+                        onOpen = { day, index ->
+                            memoryViewer = true
+                            memoryDay = day.date
+                            viewer = day.photos.map { ViewedPhoto(it.photo, it.record) }
+                            viewerPage = index
+                        },
+                        onLocate = { locationId ->
+                            memoryDays = null
+                            places.firstOrNull { it.id == locationId }?.let { place ->
+                                closePlace()
+                                engine.focus(place.latitude, place.longitude)
+                            }
+                        }
+                    )
+                }
+                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList();memoryViewer=false},{editingPhoto=it},{photo->confirmation="删除应用内照片？系统相册原图会保留，空记录和空地点会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
             }
         }
     }

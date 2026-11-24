@@ -136,6 +136,15 @@ class NativeOnlineImportMemoriesTest {
                 assertEquals(4, complete.size)
                 tap("忆往昔")
                 waitFor("去年今天 · 2 张")
+                assertAboveNavigation(names[3])
+                assertAboveNavigation("看地图")
+                val header = android.graphics.Rect()
+                waitFor("忆往昔", exact = true).getBoundsInScreen(header)
+                scenario.onActivity { activity ->
+                    val insets = androidx.core.view.ViewCompat.getRootWindowInsets(activity.window.decorView)
+                    val top = insets!!.getInsets(androidx.core.view.WindowInsetsCompat.Type.statusBars()).top
+                    assertTrue("The Memories header is inset twice: $header, status bar $top", header.top < top * 2)
+                }
                 capture("online04-memories.png")
                 waitFor("去年今天 · 2 张")
                 val swipeTop = height * 19 / 100
@@ -149,6 +158,14 @@ class NativeOnlineImportMemoriesTest {
                 shell("input swipe ${width / 2} $swipeBottom ${width / 2} $swipeTop 360")
                 waitFor(anchor.plusDays(4).format(label))
                 tap(names[2], exact = true)
+                waitFor("照片信息", exact = true)
+                val viewerFrame = instrumentation.uiAutomation.takeScreenshot()
+                try {
+                    assertEquals("The photo viewer must paint behind the status bar", Color.BLACK,
+                        viewerFrame.getPixel(viewerFrame.width / 2, 4))
+                } finally {
+                    viewerFrame.recycle()
+                }
                 tap("照片信息", exact = true)
                 revealBelow("GPS 纬度", height * 9 / 10, height * 6 / 10)
                 revealBelow("删除照片", height * 9 / 10, height * 6 / 10,

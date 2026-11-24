@@ -59,7 +59,7 @@ node --test tools/map-bundle.test.mjs
 
 Online APK 输出位于 `app/build/outputs/apk/online/debug`。需使用阿里云 Maven 镜像时加 `-PuseMirror=true`。原生测试使用 `assembleOnlineDebugAndroidTest`，测试源码在 `app/src/androidTest`，应在专用模拟器或测试机运行。
 
-Online APK 包含全球 Z6、中国 Z8 街道概览，以及全球低级别和中国 Z7 卫星概览。首次浏览时先显示内置地图，详细街道从 Z8 起按视野联网加载，已加载的瓦片可从缓存复用。卫星图叠加的道路和地名来自内置概览。
+Online APK 内置全球 Z6、中国 Z8 街道概览，以及全球 Z4、中国 Z7 卫星概览。详细街道从 Z8 起按视野联网加载，已加载的瓦片可从缓存复用。卫星图开启「叠加道路与地名」后，也会加载在线详细道路和路名。
 
 准备下方历史离线版构建步骤所列的基础资源，并将 PMTiles CLI 放到 `.tooling/pmtiles/pmtiles.exe`。使用同一天的 Protomaps 数据制作全球概览：
 

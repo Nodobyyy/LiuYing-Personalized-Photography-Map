@@ -65,7 +65,7 @@ fun PhotoViewer(
     LaunchedEffect(entries.map { it.photo.id }) { if (entries.isNotEmpty()) pager.scrollToPage(initial.coerceIn(0, entries.lastIndex)) }
     LaunchedEffect(pager.currentPage) { onPage(pager.currentPage) }
 
-    FullScreenDialog(onDismiss = onClose, dark = true) {
+    FullScreenPage(title = "照片", background = Color.Black, onClose = onClose) {
         MaterialTheme(
             colorScheme = darkColorScheme(
                 primary = Color(0xff6ee7b7),
@@ -77,7 +77,8 @@ fun PhotoViewer(
                 outlineVariant = Color(0xff2c3b40)
             )
         ) {
-            Box(Modifier.fillMaxSize().background(Color.Black)) {
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val infoMaxHeight = minOf(320.dp, maxHeight * 0.45f)
                 // 1. Full-bleed interactive photo pager
                 HorizontalPager(
                     state = pager,
@@ -204,7 +205,7 @@ fun PhotoViewer(
                                 exit = fadeOut(tween(150)) + slideOutVertically { it / 3 }
                             ) {
                                 FrostedPanel(
-                                    Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                                    Modifier.fillMaxWidth().heightIn(max = infoMaxHeight),
                                     shape = RoundedCornerShape(24.dp),
                                     elevation = 10.dp,
                                     tintColor = Color(0xE610171A)

@@ -21,7 +21,7 @@ object OnlineMapAssets {
     internal fun prepareGlobeOverview(style: JSONObject, mode: BasemapMode, dark: Boolean): String {
         val satellite = mode == BasemapMode.SATELLITE
         val image = when {
-            satellite -> "globe-satellite.png"
+            satellite -> "globe-satellite.jpg"
             dark -> "globe-streets-night.png"
             else -> "globe-streets-day.png"
         }
@@ -77,7 +77,7 @@ object OnlineMapAssets {
             satellite.getJSONObject("sources").put("satellite-overview",
                 overview.satellite.getJSONObject("sources").getJSONObject("satellite-overview"))
             satellite.getJSONObject("sources").put("satellite-world", JSONObject()
-                .put("type", "raster").put("url", overview.worldSatelliteUrl).put("tileSize", 256).put("maxzoom", 2))
+                .put("type", "raster").put("url", overview.worldSatelliteUrl).put("tileSize", 256).put("maxzoom", WORLD_SATELLITE_TRANSITION))
             val remoteLayer = satellite.getJSONArray("layers").getJSONObject(0)
                 .put("minzoom", WORLD_SATELLITE_TRANSITION)
                 .apply { remove("maxzoom") }

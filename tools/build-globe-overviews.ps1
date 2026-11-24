@@ -161,13 +161,15 @@ foreach ($theme in @(
     }
 }
 
-$atlas = [Drawing.Bitmap]::new(1024, 1024)
+$zoom = 4
+$tileCount = 1 -shl $zoom
+$atlas = [Drawing.Bitmap]::new(256 * $tileCount, 256 * $tileCount)
 $graphics = [Drawing.Graphics]::FromImage($atlas)
 try {
     $archive = Join-Path $ArchiveDirectory 'world-satellite.pmtiles'
-    foreach ($x in 0..3) {
-        foreach ($y in 0..3) {
-            $stream = [IO.MemoryStream]::new((Read-Tile $archive 2 $x $y))
+    foreach ($x in 0..($tileCount - 1)) {
+        foreach ($y in 0..($tileCount - 1)) {
+            $stream = [IO.MemoryStream]::new((Read-Tile $archive $zoom $x $y))
             $tile = [Drawing.Bitmap]::new($stream)
             try {
                 if ($tile.Width -ne 256 -or $tile.Height -ne 256) { throw 'Unexpected satellite tile size' }
@@ -178,7 +180,14 @@ try {
             }
         }
     }
-    $atlas.Save((Join-Path $outputPath 'globe-satellite.png'), [Drawing.Imaging.ImageFormat]::Png)
+    $jpeg = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object MimeType -eq 'image/jpeg'
+    $parameters = [Drawing.Imaging.EncoderParameters]::new(1)
+    try {
+        $parameters.Param[0] = [Drawing.Imaging.EncoderParameter]::new([Drawing.Imaging.Encoder]::Quality, [long]90)
+        $atlas.Save((Join-Path $outputPath 'globe-satellite.jpg'), $jpeg, $parameters)
+    } finally {
+        $parameters.Dispose()
+    }
 } finally {
     $graphics.Dispose()
     $atlas.Dispose()

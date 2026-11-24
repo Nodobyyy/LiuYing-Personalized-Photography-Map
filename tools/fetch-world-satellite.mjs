@@ -6,9 +6,10 @@ import {execFileSync} from 'node:child_process';
 const archive = path.resolve(process.argv[2] || '.tooling/world-satellite.pmtiles');
 const pmtiles = path.resolve(process.argv[3] || '.tooling/pmtiles/pmtiles.exe');
 const cache = path.join(path.dirname(archive), 'world-satellite-cache');
+const isPng = tile => tile.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
 fs.mkdirSync(cache, {recursive: true});
 const tiles = [];
-const maxZoom = 2;
+const maxZoom = 4;
 for (let z = 0; z <= maxZoom; z++) {
   for (let x = 0; x < 2 ** z; x++) {
     for (let y = 0; y < 2 ** z; y++) tiles.push({z, x, y, file: path.join(cache, `${z}-${x}-${y}.jpg`)});
@@ -25,8 +26,9 @@ async function worker() {
         const response = await fetch(url, {signal: AbortSignal.timeout(30000)});
         if (!response.ok) throw Error(`HTTP ${response.status}: ${url}`);
         const tile = Buffer.from(await response.arrayBuffer());
-        if (tile.length < 100 || tile.readUInt16BE(0) !== 0xffd8 || tile.readUInt16BE(tile.length - 2) !== 0xffd9) {
-          throw Error(`Invalid JPEG: ${url}`);
+        const jpeg = tile.length >= 100 && tile.readUInt16BE(0) === 0xffd8 && tile.readUInt16BE(tile.length - 2) === 0xffd9;
+        if (!jpeg && !isPng(tile)) {
+          throw Error(`Invalid satellite tile: ${url}`);
         }
         fs.writeFileSync(file, tile);
         break;
@@ -38,6 +40,20 @@ async function worker() {
   }
 }
 await Promise.all(Array.from({length: 6}, worker));
+// EOX returns indexed PNGs for some ocean tiles. Normalize them to JPEG before archiving.
+const pngFiles = tiles.filter(({file}) => isPng(fs.readFileSync(file))).map(({file}) => file);
+if (pngFiles.length > 0) {
+  execFileSync('pwsh', ['-NoProfile', '-Command', `
+    Add-Type -AssemblyName System.Drawing
+    $ErrorActionPreference = 'Stop'
+    foreach ($file in ($env:PHOTOMAP_OCEAN_TILES | ConvertFrom-Json)) {
+      $stream = [IO.MemoryStream]::new([IO.File]::ReadAllBytes($file))
+      $image = [Drawing.Bitmap]::new($stream)
+      try { $image.Save($file, [Drawing.Imaging.ImageFormat]::Jpeg) }
+      finally { $image.Dispose(); $stream.Dispose() }
+    }
+  `], {env: {...process.env, PHOTOMAP_OCEAN_TILES: JSON.stringify(pngFiles)}, stdio: 'inherit'});
+}
 const database = archive + '.mbtiles';
 if (fs.existsSync(database)) fs.unlinkSync(database);
 const db = new DatabaseSync(database);

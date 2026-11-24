@@ -40,8 +40,22 @@ class NativeOnlineMapTest {
             waitFor{it.queryRenderedFeatures(RectF(0f,0f,1080f,1920f),"road-labels").isNotEmpty()}
             scenario.onActivity {a->val m=map(a)!!;assertTrue(m.queryRenderedFeatures(RectF(0f,0f,1080f,1920f),"water").all {it.geometry()?.type() in listOf("Polygon","MultiPolygon")});assertEquals(0,m.queryRenderedFeatures(m.projection.toScreenLocation(LatLng(39.882,116.412)),"water").size)}
             screenshot("online-streets")
-            scenario.onActivity {it.chooseBasemap(BasemapMode.SATELLITE)}
-            waitFor{it.style?.getSource("satellite-online")!=null};SystemClock.sleep(9000)
+            scenario.onActivity {
+                val engine = MainActivity::class.java.getDeclaredField("engine")
+                    .apply { isAccessible = true }.get(it) as PhotoMapEngine
+                engine.satelliteLabels(false)
+                it.chooseBasemap(BasemapMode.SATELLITE)
+            }
+            waitFor { it.style?.getSource("satellite-online") != null && it.style?.getSource("base") == null }
+            scenario.onActivity {
+                val engine = MainActivity::class.java.getDeclaredField("engine")
+                    .apply { isAccessible = true }.get(it) as PhotoMapEngine
+                engine.satelliteLabels(true)
+            }
+            waitFor {
+                it.queryRenderedFeatures(RectF(0f, 0f, 1080f, 1920f), "road-labels").isNotEmpty()
+            }
+            SystemClock.sleep(5000)
             assertTrue("Real satellite imagery must have colour detail, not a blank background",screenshot("online-satellite")>50)
             scenario.onActivity {it.chooseBasemap(BasemapMode.STREETS)}
             waitFor{it.queryRenderedFeatures(RectF(0f,0f,1080f,1920f),"road-labels").isNotEmpty()}
