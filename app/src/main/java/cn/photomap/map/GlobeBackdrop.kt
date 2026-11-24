@@ -7,7 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.PointF
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.os.Build
@@ -421,21 +420,23 @@ internal class GlobeBackdrop(context: Context) : View(context) {
         cameraChanged()
     }
 
+    private val fallbackPixels = DoubleArray(2 * (FLAT_CELLS + 1) * (FLAT_CELLS + 1))
+    private val fallbackCoordinates = DoubleArray(fallbackPixels.size)
+
     private fun drawFlatFallback(canvas: Canvas, camera: MapLibreMap, bitmap: Bitmap) {
-        val projection = camera.projection
-        val point = PointF()
-        for (row in 0..FLAT_CELLS) {
-            for (column in 0..FLAT_CELLS) {
-                val index = row * (FLAT_CELLS + 1) + column
-                point.set(width * column.toFloat() / FLAT_CELLS, height * row.toFloat() / FLAT_CELLS)
-                val coordinate = projection.fromScreenLocation(point)
-                x[index] = point.x.toDouble()
-                y[index] = point.y.toDouble()
-                u[index] = .5 + coordinate.longitude / 360
-                v[index] = mercatorY(Math.toRadians(coordinate.latitude))
-            }
+        val columns = FLAT_CELLS + 1
+        for (index in 0 until fallbackPixels.size / 2) {
+            fallbackPixels[index * 2] = width * (index % columns).toDouble() / FLAT_CELLS
+            fallbackPixels[index * 2 + 1] = height * (index / columns).toDouble() / FLAT_CELLS
         }
-        drawMesh(canvas, bitmap, FLAT_CELLS, FLAT_CELLS + 1, wrapAround = false, useVertexColors = false)
+        camera.projection.fromScreenLocations(fallbackPixels, fallbackCoordinates)
+        for (index in 0 until fallbackPixels.size / 2) {
+            x[index] = fallbackPixels[index * 2]
+            y[index] = fallbackPixels[index * 2 + 1]
+            u[index] = .5 + fallbackCoordinates[index * 2 + 1] / 360
+            v[index] = mercatorY(Math.toRadians(fallbackCoordinates[index * 2]))
+        }
+        drawMesh(canvas, bitmap, FLAT_CELLS, columns, wrapAround = false, useVertexColors = false)
     }
 
     private fun drawMesh(

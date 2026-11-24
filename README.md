@@ -29,7 +29,7 @@ Online 版在手机桌面显示为「留影」（`cn.photomap.online`），支�
 - **全球卫星底图全量接入国内 CDN（免 VPN 秒开）+ 端侧 GCJ-02 实时纠偏**：
   - **中国境内及 18km 近海缓冲带**：直连高德卫星 CDN（`webst01-04.is.autonavi.com`，最高 Z18），通过端侧实时像素重采样消除火星坐标偏移，并结合内置中国国界多边形（含四角与近海缓冲带检测）与 JPEG 魔数校验自动过滤“此区域无卫星图”占位块。
   - **海外全境及高缩放补充**：直连腾讯云国内 EdgeOne 节点承载的必应全球卫星源（`t0-t3.dynamic.tiles.ditu.live.com`，原生 WGS-84 QuadKey 瓦片，国内直连延迟 ~40ms），彻底解决手机不挂代理时海外高倍缩放卫星图加载不出来的问题。
-- **卫星叠加层零跨境阻塞**：卫星模式开启“叠加道路与地名”时剥离海外 `tiles.openfreemap.org` 请求，100% 由内置离线矢量库（`overview` / `context`）秒级渲染至 Z17.5，配合本地概览与低级瓦片全层级托底，缩放不黑屏。
+- **卫星叠加层零跨境阻塞**：卫星模式开启“叠加道路与地名”时剥离海外 `tiles.openfreemap.org` 请求，由内置矢量概览提供，配合本地概览与低级瓦片全层级托底，缩放不黑屏。
 - **沉浸式液态玻璃 UI 重构**：全屏 Edge-to-Edge 沉浸式状态栏、一体式顶部导航舱、底部悬浮操作坞、1.8dp 统一描边纯矢量图标库，以及深浅双色自适应的磨砂玻璃底部抽屉。
 
 ## 当前局限与后续方向
@@ -59,14 +59,13 @@ node --test tools/map-bundle.test.mjs
 
 Online APK 输出位于 `app/build/outputs/apk/online/debug`。需使用阿里云 Maven 镜像时加 `-PuseMirror=true`。原生测试使用 `assembleOnlineDebugAndroidTest`，测试源码在 `app/src/androidTest`，应在专用模拟器或测试机运行。
 
-带内置概览的 Online APK 包含全球 Z8 矢量概览和 Z9 主要道路补充层，可在联网细节加载前显示道路及已有路名。小街巷、建筑和景点细节继续按视野联网获取。中国 Z10 街道概览和 Z7 卫星概览也随包提供。
+Online APK 包含全球 Z6、中国 Z8 街道概览，以及全球低级别和中国 Z7 卫星概览。首次浏览时先显示内置地图，详细街道从 Z8 起按视野联网加载，已加载的瓦片可从缓存复用。卫星图叠加的道路和地名来自内置概览。
 
 准备下方历史离线版构建步骤所列的基础资源，并将 PMTiles CLI 放到 `.tooling/pmtiles/pmtiles.exe`。使用同一天的 Protomaps 数据制作全球概览：
 
 ```powershell
-.tooling/pmtiles/pmtiles.exe extract https://build.protomaps.com/20261101.pmtiles .tooling/world-z9.pmtiles --maxzoom=9
-node tools/compact-streets.mjs .tooling/world-z9.pmtiles .tooling/world-z8-compact.pmtiles 8
-node tools/compact-streets.mjs .tooling/world-z9.pmtiles .tooling/world-roads-z9.pmtiles 9 --roads-only --major-top
+.tooling/pmtiles/pmtiles.exe extract https://build.protomaps.com/20261101.pmtiles .tooling/world-z6.pmtiles --maxzoom=6
+node tools/compact-streets.mjs .tooling/world-z6.pmtiles .tooling/world-z6-compact.pmtiles 6
 node tools/fetch-world-satellite.mjs
 node tools/stage-online-overview.mjs
 ```

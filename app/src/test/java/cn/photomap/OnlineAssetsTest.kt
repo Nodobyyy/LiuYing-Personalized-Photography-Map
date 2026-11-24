@@ -22,9 +22,12 @@ class OnlineAssetsTest {
         if (packaged) {
             val sources = j.getJSONObject("sources")
             assertTrue(sources.getJSONObject("overview").getString("url").startsWith("pmtiles://file://"))
-            assertEquals(10, sources.getJSONObject("overview").getInt("maxzoom"))
-            assertEquals(10, sources.getJSONObject("base").getInt("minzoom"))
+            assertEquals(8, sources.getJSONObject("overview").getInt("maxzoom"))
+            assertEquals(6, sources.getJSONObject("context").getInt("maxzoom"))
+            assertEquals(8, sources.getJSONObject("base").getInt("minzoom"))
             assertTrue(loaded.satellite.getJSONObject("sources").has("satellite-overview"))
+            val layers = loaded.satellite.getJSONArray("layers")
+            assertEquals(1, (0 until layers.length()).count { layers.getJSONObject(it).optString("source") == "satellite-online" })
         }
         assertEquals("cn.photomap.online",c.packageName)
     }

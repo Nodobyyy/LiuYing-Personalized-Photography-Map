@@ -14,7 +14,9 @@ import org.json.JSONObject
 import org.maplibre.android.module.http.HttpRequestUtil
 import org.maplibre.android.offline.OfflineManager
 import java.io.IOException
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Tile transport has no upload path. Photos/records are local GeoJSON and files. */
@@ -114,28 +116,52 @@ object MapNetwork {
             .readTimeout(15, TimeUnit.SECONDS)
             .addNetworkInterceptor(check)
             .build()
-        fun fetchSources(tiles: List<GcjSatellite.Tile>): List<ByteArray>? {
-            val results = arrayOfNulls<ByteArray>(tiles.size)
-            val pending = java.util.concurrent.CountDownLatch(tiles.size)
-            tiles.forEachIndexed { index, tile ->
-                val key = "${tile.z}/${tile.x}/${tile.y}"
-                val cached = sourceTiles.get(key)
-                if (cached != null) { results[index] = cached; pending.countDown(); return@forEachIndexed }
-                val host = "webst0${(tile.x + tile.y) % 4 + 1}.is.autonavi.com"
-                val url = "https://$host/appmaptile?style=6&x=${tile.x}&y=${tile.y}&z=${tile.z}"
-                raw.newCall(Request.Builder().url(url).build()).enqueue(object : okhttp3.Callback {
-                    override fun onFailure(call: okhttp3.Call, error: IOException) = pending.countDown()
-                    override fun onResponse(call: okhttp3.Call, response: Response) {
-                        try {
-                            val bytes = response.use { if (it.isSuccessful) it.body?.bytes() else null }
-                            if (GcjSatellite.isValidImagery(bytes)) { sourceTiles.put(key, bytes!!); results[index] = bytes }
-                        } catch (_: IOException) {
-                        } finally { pending.countDown() }
-                    }
-                })
+        val sourceClient = raw.newBuilder().callTimeout(8, TimeUnit.SECONDS).build()
+        val inFlight = mutableMapOf<GcjSatellite.Tile, CompletableFuture<ByteArray?>>()
+        fun fetchSource(tile: GcjSatellite.Tile): CompletableFuture<ByteArray?> = synchronized(inFlight) {
+            val key = "${tile.z}/${tile.x}/${tile.y}"
+            sourceTiles.get(key)?.let { return@synchronized CompletableFuture.completedFuture(it) }
+            inFlight[tile]?.let { return@synchronized it }
+            val pending = CompletableFuture<ByteArray?>()
+            inFlight[tile] = pending
+            val host = "webst0${(tile.x + tile.y) % 4 + 1}.is.autonavi.com"
+            val url = "https://$host/appmaptile?style=6&x=${tile.x}&y=${tile.y}&z=${tile.z}"
+            fun complete(bytes: ByteArray?) {
+                synchronized(inFlight) {
+                    if (bytes != null) sourceTiles.put(key, bytes)
+                    inFlight.remove(tile)
+                }
+                pending.complete(bytes)
             }
-            if (!pending.await(15, TimeUnit.SECONDS)) return null
-            return results.toList().takeIf { list -> list.all { it != null } }?.map { it!! }
+            sourceClient.newCall(Request.Builder().url(url).build()).enqueue(object : okhttp3.Callback {
+                override fun onFailure(call: okhttp3.Call, error: IOException) = complete(null)
+                override fun onResponse(call: okhttp3.Call, response: Response) {
+                    val bytes = try {
+                        response.use { if (it.isSuccessful) it.body?.bytes() else null }
+                    } catch (_: IOException) { null }
+                    complete(bytes?.takeIf(GcjSatellite::isValidImagery))
+                }
+            })
+            pending
+        }
+        fun fetchSources(tiles: List<GcjSatellite.Tile>, request: okhttp3.Call): List<ByteArray>? {
+            val pending = tiles.map(::fetchSource)
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8)
+            return pending.map { tile ->
+                while (!tile.isDone) {
+                    if (request.isCanceled()) throw IOException("Tile request canceled")
+                    if (System.nanoTime() >= deadline) return null
+                    try {
+                        tile.get(100, TimeUnit.MILLISECONDS)
+                    } catch (_: TimeoutException) {
+                        continue
+                    } catch (error: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        throw IOException("Tile request interrupted", error)
+                    }
+                }
+                tile.getNow(null) ?: return null
+            }
         }
         val satellite = okhttp3.Interceptor { chain ->
             val request = chain.request()
@@ -144,7 +170,7 @@ object MapNetwork {
                 ?: throw IOException("Invalid satellite tile")
             val (z, x, y) = match.destructured.toList().map { it.toInt() }
             val corrected = if (GcjSatellite.covers(z, x, y, chinaBoundary)) {
-                try { GcjSatellite.build(z, x, y, ::fetchSources) } catch (_: RuntimeException) { null }
+                try { GcjSatellite.build(z, x, y) { fetchSources(it, chain.call()) } } catch (_: RuntimeException) { null }
             } else null
             if (corrected != null) {
                 Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
@@ -172,7 +198,7 @@ object MapNetwork {
         }
         val client = raw.newBuilder()
             // Allow higher HTTP/2 tile concurrency per host while keeping total queue responsive.
-            .dispatcher(Dispatcher().apply { maxRequests = 48; maxRequestsPerHost = 24 })
+            .dispatcher(Dispatcher().apply { maxRequests = 32; maxRequestsPerHost = 8 })
             .readTimeout(20, TimeUnit.SECONDS)
             .addInterceptor(satellite)
             .addInterceptor(metadataCache)

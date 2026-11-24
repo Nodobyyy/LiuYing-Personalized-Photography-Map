@@ -44,6 +44,8 @@ class NativeOnlineOverviewTest {
             return colors.size
         }
         val viewport = RectF(0f, 0f, 1080f, 1920f)
+        val settings = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+        val originalTerminator = settings.getBoolean("solar-terminator", true)
         shell("svc wifi disable")
         shell("svc data disable")
         try {
@@ -64,6 +66,7 @@ class NativeOnlineOverviewTest {
                     val globe = map(activity)!!
                     assertFalse(globe.uiSettings.isRotateGesturesEnabled)
                     assertEquals(0.0, globe.cameraPosition.bearing, 0.01)
+                    engine(activity).solarTerminator(false)
                     engine(activity).national()
                     assertNull(globe.style?.getLayer("china-reference-outline"))
                     assertNull(globe.style?.getLayer("china-display-mask"))
@@ -122,7 +125,7 @@ class NativeOnlineOverviewTest {
                     val frame = instrumentation.uiAutomation.takeScreenshot()
                     return try {
                         val row = frame.height / 2
-                        (0 until frame.width).count { x -> frame.getPixel(x, row) and 0x00ffffff != 0 }
+                        (0 until frame.width).count { x -> android.graphics.Color.blue(frame.getPixel(x, row)) > 80 }
                     } finally {
                         frame.recycle()
                     }
@@ -159,7 +162,7 @@ class NativeOnlineOverviewTest {
                         val globeVisible = (-2..2).any { dx ->
                             (-2..2).any { dy ->
                                 val color = frame.getPixel(frame.width / 2 + dx * 12, frame.height / 2 + dy * 12)
-                                color and 0x00ffffff != 0
+                                android.graphics.Color.blue(color) > 80
                             }
                         }
                         assertTrue("The atlas must stay visible during globe spin", globeVisible)
@@ -220,22 +223,19 @@ class NativeOnlineOverviewTest {
                     "Tokyo" to LatLng(35.6762, 139.6503), "New York" to LatLng(40.7128, -74.0060))) {
                     scenario.onActivity { activity ->
                         activity.chooseBasemap(BasemapMode.STREETS)
-                        map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(location, 12.0))
+                        map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(location, 7.0))
                     }
                     await("$name must show bundled roads while disconnected") {
-                        it.queryRenderedFeatures(viewport, "context-detail-major-roads").isNotEmpty()
+                        it.queryRenderedFeatures(viewport, "context-major-roads").isNotEmpty()
                     }
                 }
                 await("New York must retain the land layer when roads overzoom") {
                     it.queryRenderedFeatures(viewport, "context-land").isNotEmpty()
                 }
-                await("New York must show bundled road labels or route refs") {
-                    it.queryRenderedFeatures(viewport, "context-detail-road-labels").isNotEmpty()
-                }
                 screenshot("online051-new-york-disconnected")
                 scenario.onActivity { activity ->
                     activity.chooseBasemap(BasemapMode.STREETS)
-                    map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.92, 116.41), 8.5))
+                    map(activity)!!.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.92, 116.41), 7.5))
                 }
                 await("No local place labels without a connection") {
                     it.queryRenderedFeatures(viewport, "embedded-place-labels").isNotEmpty()
@@ -276,6 +276,7 @@ class NativeOnlineOverviewTest {
                 assertTrue("Detail tiles must actually come through the approved client", MapNetwork.tileRequests() > 0)
             }
         } finally {
+            settings.edit().putBoolean("solar-terminator", originalTerminator).apply()
             shell("svc wifi enable")
             shell("svc data enable")
         }

@@ -110,9 +110,9 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             ready.setMaxZoomPreference(17.0)
             if (BuildConfig.ONLINE_MAPS) {
                 ready.setTileCacheEnabled(true)
-                // Load a coarse parent first so a zoom change can keep drawing
-                // a complete globe while the new visible tiles are prepared.
-                ready.setPrefetchZoomDelta(4)
+                // Bundled parent tiles already cover the viewport while detail loads.
+                // Avoid competing online requests for a second zoom level.
+                ready.setPrefetchZoomDelta(0)
                 ready.addOnCameraMoveListener { globeBackdrop?.cameraChanged() }
                 globeSpin = GlobeSpin(view, ready, {
                     val camera = ready.cameraPosition
@@ -309,7 +309,6 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             json.put("layers", retainedLayers)
         }
         val isSatellite = basemapMode == BasemapMode.SATELLITE
-        if (BuildConfig.ONLINE_MAPS) ready.setPrefetchZoomDelta(if (isSatellite) 0 else 4)
         val borderColor = Color.parseColor(OnlineBoundaries.color(dark, isSatellite))
         val globeOverview = if (BuildConfig.ONLINE_MAPS && bundle != null) {
             OnlineBoundaries.apply(json, dark, isSatellite)
@@ -337,9 +336,8 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             val maxZoom=json.optJSONObject("sources")?.let { sources->sources.keys().asSequence().map {sources.getJSONObject(it)}.filter {it.optString("type")=="vector"}.map {it.optDouble("maxzoom",12.0)}.maxOrNull() } ?: 0.0
             (context.applicationContext as? PhotoMapApplication)?.startupDiagnostics?.mapReady()
             onStatus(if(bundle==null) "未加载底图；摄影记录仍保存在本机" else if(BuildConfig.ONLINE_MAPS) {
-                val worldZoom = json.optJSONObject("sources")?.optJSONObject("context-detail")?.optInt("maxzoom") ?: 0
-                val overview = if (hasOnlineOverview) "内置全球道路 Z$worldZoom、中国街道 Z10 和卫星 Z7 · " else ""
-                "${overview}OpenFreeMap 在线街道 · 高德/必应国内节点卫星 · 地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
+                val overview = if (hasOnlineOverview) "内置地图概览 · " else ""
+                "${overview}地图缓存上限 ${MapNetwork.CACHE_MIB} MiB"
             } else "${bundle.attribution} · ${if(key=="base") "内置全国概览" else "已导入精细图"} · 街道数据最高 Z${maxZoom.toInt()}${if(fineSatelliteLoaded) " · 含 ${urban.count} 个城区精细影像" else ""}")
             if(fitFirstView) {fitFirstView=false;view.post {ready.moveCamera(overviewCamera())}}
             refresh();refreshPickHint();refreshMapInfo();chooseMap()
@@ -369,6 +367,7 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             PhotoPoint(place.id, point.x.toDouble(), point.y.toDouble(), place.photoCount)
         }
         val density=context.resources.displayMetrics.density
+        val selectedPlace = selection
         val size = photoMarkerDp(ready.cameraPosition.zoom)
         val clusterRadius=(hypot(size, size * 144 / 128) + 8)*density
         val markerDp=kotlin.math.round(size).toFloat()
@@ -377,19 +376,21 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
             val visible=clusters.filter { it.x in -80.0*density..view.width+80.0*density && it.y in -80.0*density..view.height+80.0*density }
             fun id(c: PhotoCluster): String {
                 val cover=snapshotItems.getValue(c.coverId).cover
-                val signature=c.key+":"+cover.id+":"+cover.hash+":"+c.photoCount+":"+c.members.any {it.id==selection}+":"+markerDp
+                val signature=c.key+":"+cover.id+":"+cover.hash+":"+c.photoCount+":"+c.members.any {it.id==selectedPlace}+":"+markerDp
                 return "u-"+MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).take(10).joinToString("") { "%02x".format(it) }
             }
-            val names=visible.map { id(it) }.toSet()
-            val images=withContext(Dispatchers.IO) { visible.filter { id(it) !in icons }.associate { c->
+            val named = withContext(Dispatchers.Default) { visible.associateWith(::id) }
+            val names = named.values.toSet()
+            val previousIcons = icons
+            val images=withContext(Dispatchers.IO) { named.filterValues { it !in previousIcons }.entries.associate { (c, name)->
                 val place=snapshotItems.getValue(c.coverId); val file=library.file(place.cover.thumbnail)
                 val cover=BitmapFactory.decodeFile(file.path)
-                id(c) to marker(cover,c.photoCount,c.members.any { it.id==selection },markerDp).also { cover?.recycle() }
+                name to marker(cover,c.photoCount,c.members.any { it.id==selectedPlace },markerDp).also { cover?.recycle() }
             } }
             ensureActive(); images.forEach { (key,image)->currentStyle.addImage(key,image) }
-            currentStyle.getSourceAs<GeoJsonSource>("user-photos")?.setGeoJson(FeatureCollection.fromFeatures(visible.map { c->
+            currentStyle.getSourceAs<GeoJsonSource>("user-photos")?.setGeoJson(FeatureCollection.fromFeatures(named.map { (c, name)->
                 val place=snapshotItems.getValue(c.members.first().id)
-                Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(place.longitude,place.latitude)).apply { addStringProperty("icon",id(c)) }
+                Feature.fromGeometry(org.maplibre.geojson.Point.fromLngLat(place.longitude,place.latitude)).apply { addStringProperty("icon",name) }
             }))
             (icons-names).forEach { currentStyle.removeImage(it) }; icons=names; displayed=visible
         }
