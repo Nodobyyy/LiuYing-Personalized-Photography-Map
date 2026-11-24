@@ -6,4 +6,4 @@
 
 安装包为在线调试版，约 502.1 MiB，版本号 24。
 
-SHA-256 $hash
+SHA-256 f986a3926ae7f7c9deb4b8d8bf2ce6f2afff3db51c449b9d3d276fa41157d7a8
