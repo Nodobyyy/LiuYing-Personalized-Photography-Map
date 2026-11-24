@@ -29,6 +29,14 @@ import androidx.core.view.WindowCompat
             val window=(view.parent as? DialogWindowProvider)?.window
             window?.let {
                 WindowCompat.setDecorFitsSystemWindows(it, false)
+                it.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+                it.decorView.systemUiVisibility = it.decorView.systemUiVisibility or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    android.view.View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                if (android.os.Build.VERSION.SDK_INT >= 30) {
+                    it.attributes = it.attributes.apply { setFitInsetsTypes(0) }
+                }
                 it.setLayout(android.view.WindowManager.LayoutParams.MATCH_PARENT, android.view.WindowManager.LayoutParams.MATCH_PARENT)
                 it.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                 it.statusBarColor = android.graphics.Color.TRANSPARENT
