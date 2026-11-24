@@ -47,8 +47,8 @@ fun Memories(
     val anchor = remember(timeline, anniversary) { anniversaryPage(timeline, anniversary) }
     val pager = rememberPagerState(initialPage = anchor) { timeline.size }
 
-    FullScreenDialog(onDismiss = onClose, dark = dark, compactTop = true) {
-        val colors = MaterialTheme.colorScheme
+    val colors = MaterialTheme.colorScheme
+    FullScreenDialog(onDismiss = onClose, dark = dark, background = colors.surface) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -72,7 +72,6 @@ fun Memories(
                 }
                 Column(Modifier.weight(1f)) {
                     Text("忆往昔", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("上下滑动回看光影时光", style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
                 }
                 if (timeline.isNotEmpty()) {
                     Surface(
@@ -99,11 +98,6 @@ fun Memories(
                         ) {
                             AppIcon(AppIconType.HISTORY, tint = colors.primary, size = 32.dp)
                             Text("还没有带日期的记忆", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "导入带有拍摄日期的照片后，这里会按时间轴为你珍藏每一天的光影。",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
                         }
                     }
                 }

@@ -76,7 +76,7 @@ fun ImportReview(
     val ready = pending.count { it.isReady }
     val colors = MaterialTheme.colorScheme
 
-    FullScreenDialog(onDismiss = { if (!busy) onDismiss() }, dark = dark, compactTop = true) {
+    FullScreenDialog(onDismiss = { if (!busy) onDismiss() }, dark = dark, background = colors.surface) {
         EditorPanel {
             Column(Modifier.fillMaxSize().imePadding()) {
                 // Top Bar
@@ -98,7 +98,7 @@ fun ImportReview(
                         }
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("补填导入信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("补填照片信息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
                             "共 ${pending.size} 张 · $ready 张已就绪",
                             style = MaterialTheme.typography.labelSmall,
@@ -220,7 +220,7 @@ fun ImportReview(
                                     shape = RoundedCornerShape(14.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text("将此日期应用到其余缺日期照片", style = MaterialTheme.typography.labelMedium)
+                                    Text("补齐其他照片的日期", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
 
@@ -263,14 +263,14 @@ fun ImportReview(
                                     shape = RoundedCornerShape(14.dp),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    Text("将此位置应用到其余缺位置照片", style = MaterialTheme.typography.labelMedium)
+                                    Text("补齐其他照片的位置", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
 
                             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.35f))
 
                             TextButton(onClick = { showCamera = !showCamera }, enabled = !busy) {
-                                Text(if (showCamera) "收起相机参数" else "补填或更正相机参数（可选）")
+                                Text(if (showCamera) "收起相机参数" else "编辑相机参数")
                             }
                             AnimatedVisibility(
                                 visible = showCamera,
@@ -307,7 +307,7 @@ fun ImportReview(
                             modifier = Modifier.weight(1.4f).height(46.dp),
                             shape = RoundedCornerShape(18.dp)
                         ) {
-                            Text("保存已就绪的 $ready 张", fontWeight = FontWeight.SemiBold)
+                            Text("保存 $ready 张", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }

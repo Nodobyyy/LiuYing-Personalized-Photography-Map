@@ -18,7 +18,7 @@ Online 版在手机桌面显示为「留影」（`cn.photomap.online`），支�
 
 ## 下载与使用
 
-在 GitHub Releases 下载最新 Online 正式版（当前最新为 `v1.0.1`）。点「导入照片」可批量读取拍摄日期和 GPS，缺少信息时可补填。点「地图选点」也可先确定位置再添加照片。点照片标记查看作品，点「底图」切换地图样式，点「数据」导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
+在 GitHub Releases 下载最新安装包。点「导入照片」可批量读取拍摄日期和 GPS，缺少信息时可补填。点「地图选点」也可先确定位置再添加照片。点照片标记查看作品，点「底图」切换地图样式，点「数据」导出或恢复备份。 [下载页面](https://github.com/Nodobyyy/LiuYing-Personalized-Photography-Map/releases)
 
 ## 近期重点更新（v1.0.0 – v1.0.1 正式版）
 

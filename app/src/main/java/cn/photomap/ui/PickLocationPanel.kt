@@ -98,8 +98,8 @@ fun PickLocationPanel(
                 results = mergePlaces(first.orEmpty() + second.orEmpty())
                 status = when {
                     results.isNotEmpty() -> ""
-                    first == null && second == null -> "地点搜索暂不可用，可输入经纬度或拖动地图"
-                    else -> "没有找到地点，试试加上城市或校区名"
+                    first == null && second == null -> "搜索暂不可用"
+                    else -> "未找到地点，试试加上城市名"
                 }
             }
         } catch (_: IllegalArgumentException) {
@@ -134,7 +134,7 @@ fun PickLocationPanel(
                             .clickable { showPreview = true },
                         contentScale = ContentScale.Crop
                     )
-                    TextButton(onClick = { showPreview = true }) { Text("查看待定位照片", fontWeight = FontWeight.Medium) }
+                    TextButton(onClick = { showPreview = true }) { Text("查看照片", fontWeight = FontWeight.Medium) }
                 }
             }
             OutlinedTextField(
@@ -202,7 +202,7 @@ fun PickLocationPanel(
                         }
                     }
                     if (displayedResults.size > 1) {
-                        Text("找到 ${displayedResults.size} 个地点，可滑动查看", style = MaterialTheme.typography.labelSmall)
+                        Text("${displayedResults.size} 个结果", style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }

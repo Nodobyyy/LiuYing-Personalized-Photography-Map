@@ -355,7 +355,7 @@ class MainActivity : ComponentActivity() {
                     }
                     FrostedPanel(Modifier.align(Alignment.BottomCenter).imePadding().padding(14.dp).widthIn(max=480.dp).fillMaxWidth(),shape=RoundedCornerShape(26.dp),elevation=12.dp) {
                         Column(Modifier.padding(16.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(10.dp)) {
-                            Text("拖动地图，将拍摄点对准中心准星",textAlign=TextAlign.Center,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
+                            Text("拖动地图选点",textAlign=TextAlign.Center,style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
                             Text(pickHint.ifBlank {"正在读取位置…"},textAlign=TextAlign.Center,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically) {
                                 OutlinedButton(onClick=::finishPicking,shape=RoundedCornerShape(18.dp),modifier=Modifier.weight(1f).height(46.dp)) {Text("取消")}
@@ -541,8 +541,8 @@ class MainActivity : ComponentActivity() {
                         onLocate = { locationId ->
                             memoryDays = null
                             places.firstOrNull { it.id == locationId }?.let { place ->
+                                closePlace()
                                 engine.focus(place.latitude, place.longitude)
-                                select(place)
                             }
                         }
                     )
@@ -572,7 +572,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
-                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList();memoryViewer=false},{editingPhoto=it},{photo->confirmation="删除这张应用内照片？系统相册中的原件不受影响。最后一张照片删除后，空记录和空地点也会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
+                if(viewer.isNotEmpty()) PhotoViewer(viewer,viewerPage,library,{viewerPage=it},{viewer=emptyList();memoryViewer=false},{editingPhoto=it},{photo->confirmation="删除应用内照片？系统相册原图会保留，空记录和空地点会移除。" to {work("正在删除照片") {library.removePhoto(photo.id);reload()}}})
                 if(editingPhoto!=null) {
                     val photo=editingPhoto!!
                     var title by remember(photo.id) {mutableStateOf(photo.title)};var note by remember(photo.id) {mutableStateOf(photo.note)};var date by remember(photo.id) {mutableStateOf(photo.date)}
@@ -611,7 +611,7 @@ class MainActivity : ComponentActivity() {
                             Text(mapInfo,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 4.dp))
                         }
                         Text(if(BuildConfig.ONLINE_MAPS) {
-                            "© OpenStreetMap · OpenFreeMap · Protomaps · 高德 · 必应国内节点 · EOX。照片与作品仅保存于本机。"
+                            "© OpenStreetMap · OpenFreeMap · Protomaps · 高德 · 必应 · EOX"
                         } else "切换不联网。离线包可在设置中导入管理。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
                     }
                 }
@@ -658,12 +658,11 @@ class MainActivity : ComponentActivity() {
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.CAMERA_PLUS, tint = MaterialTheme.colorScheme.primary, size = 28.dp)
-                            Text("还没有点亮任何足迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            Text("导入带有 GPS 的照片，或在地图上选点，即可点亮你的摄影地图。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                            Text("还没有足迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Button(
                                 onClick = { placesSheet = false; beginDirectImport() },
                                 shape = RoundedCornerShape(18.dp)
-                            ) { Text("导入第一张照片", fontWeight = FontWeight.SemiBold) }
+                            ) { Text("导入照片", fontWeight = FontWeight.SemiBold) }
                         }
                     }
                 } else {
@@ -765,14 +764,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        Text(
-            if (BuildConfig.ONLINE_MAPS && basemapMode == BasemapMode.SATELLITE)
-                "全球国内 CDN 免 VPN 秒开：境内高德（WGS-84 实时纠偏），海外必应国内节点"
-            else basemapMode.description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp)
-        )
         if(basemapMode==BasemapMode.SATELLITE) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
                 Text("叠加道路与地名",Modifier.weight(1f),style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.Medium,color=MaterialTheme.colorScheme.onSurface)
@@ -791,8 +782,7 @@ class MainActivity : ComponentActivity() {
         if(BuildConfig.ONLINE_MAPS) LiquidGlassCard(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("实时地球昼夜晨昏线",style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
-                    Text("根据当前时间与太阳直射点，实时渲染昼夜半球",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("地球昼夜",style=MaterialTheme.typography.bodyMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface)
                 }
                 Spacer(Modifier.width(8.dp))
                 Switch(
@@ -823,7 +813,7 @@ class MainActivity : ComponentActivity() {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 cn.photomap.ui.AppIcon(cn.photomap.ui.AppIconType.DATABASE, tint = MaterialTheme.colorScheme.primary, size = 18.dp)
-                                Text("本地数据与备份",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
+                                Text("备份",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.Bold,color=MaterialTheme.colorScheme.onSurface)
                             }
                             Text("${places.size} 个地点 / ${places.sumOf {it.photoCount}} 张原图，全部保存在本机私有目录。卸载会清除作品，请定期备份。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             if(busy) {LinearProgressIndicator(Modifier.fillMaxWidth());Text(progress,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurface)}
@@ -889,7 +879,7 @@ class MainActivity : ComponentActivity() {
                             if(!BuildConfig.ONLINE_MAPS) {
                                 OutlinedButton(onClick={launchSystemPicker {importMap.launch(arrayOf("application/zip","application/octet-stream"))}},enabled=!busy,shape=RoundedCornerShape(16.dp),modifier=Modifier.fillMaxWidth()) {Text("导入离线地图包（全国 / 地区）")}
                             } else {
-                                OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,shape=RoundedCornerShape(16.dp),modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存（保留照片）")}
+                                OutlinedButton(onClick={busy=true;progress="正在清理地图缓存";MapNetwork.clearCache(this@MainActivity){busy=false;message(it)}},enabled=!busy,shape=RoundedCornerShape(16.dp),modifier=Modifier.fillMaxWidth()) {Text("清理地图缓存")}
                             }
                         }
                     }
@@ -900,7 +890,7 @@ class MainActivity : ComponentActivity() {
                         TextButton(onClick=::openMapSources,enabled=!busy) {Text("地图来源与许可")}
                         TextButton(onClick={launchSystemPicker {diagnosticExport.launch("PhotoMap-startup.txt")}}) {Text("导出故障报告")}
                     }
-                    Text("留影 ${BuildConfig.VERSION_NAME} · 无账号、无云同步、无广告。全部照片与记录仅保存在本机。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text("留影 ${BuildConfig.VERSION_NAME}",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 4.dp))
                 }
             }
         }

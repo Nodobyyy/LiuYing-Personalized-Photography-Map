@@ -97,7 +97,7 @@ fun RecordEditor(
     val colors = MaterialTheme.colorScheme
     var showDatePicker by remember { mutableStateOf(false) }
 
-    FullScreenDialog(onDismiss = { if (!busy) onCancel() }, compactTop = true) {
+    FullScreenDialog(onDismiss = { if (!busy) onCancel() }, background = colors.surface) {
         EditorPanel {
             Column(Modifier.fillMaxSize().imePadding()) {
                 // Clean unified top bar
@@ -198,7 +198,7 @@ fun RecordEditor(
                                 ) {
                                     AppIcon(AppIconType.CAMERA_PLUS, tint = colors.primary, size = 17.dp)
                                     Spacer(Modifier.width(6.dp))
-                                    Text(if (hasPhotos) "继续添加照片" else "从系统相册选择照片", fontWeight = FontWeight.SemiBold)
+                                    Text(if (hasPhotos) "继续添加照片" else "选择照片", fontWeight = FontWeight.SemiBold)
                                 }
                                 if (draft.message.isNotBlank()) {
                                     Text(draft.message, style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
@@ -214,7 +214,7 @@ fun RecordEditor(
                                 OutlinedTextField(
                                     draft.name,
                                     { draft.name = it.take(200) },
-                                    label = { Text("拍摄地点名称") },
+                                    label = { Text("地点名称") },
                                     leadingIcon = { AppIcon(AppIconType.MAP_PIN, tint = colors.primary, size = 18.dp) },
                                     singleLine = true,
                                     shape = fieldShape,
@@ -232,7 +232,7 @@ fun RecordEditor(
                                         color = colors.onSurfaceVariant
                                     )
                                     TextButton(onClick = onMove, enabled = !busy) {
-                                        Text("地图微调位置", fontWeight = FontWeight.SemiBold)
+                                        Text("调整位置", fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }
@@ -273,7 +273,7 @@ fun RecordEditor(
                                 OutlinedTextField(
                                     draft.note,
                                     { draft.note = it.take(100000) },
-                                    label = { Text("摄影心得 / 故事（可选）") },
+                                    label = { Text("备注（可选）") },
                                     minLines = 4,
                                     shape = fieldShape,
                                     modifier = Modifier.fillMaxWidth(),
@@ -281,14 +281,6 @@ fun RecordEditor(
                                 )
                             }
                         }
-                    }
-                    item {
-                        Text(
-                            "原图与 EXIF 均保留在本机私有目录，不改动系统相册。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
                     }
                 }
                 if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())

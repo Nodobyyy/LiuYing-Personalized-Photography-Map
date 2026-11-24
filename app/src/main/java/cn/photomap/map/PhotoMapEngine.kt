@@ -427,22 +427,13 @@ class PhotoMapEngine(private val context: Context, private val scope: CoroutineS
         val ready = map ?: return
         suggestedName = name
         val coordinates="%.6f, %.6f".format(target.latitude,target.longitude)
-        val detail=if(BuildConfig.ONLINE_MAPS) {if(basemapMode==BasemapMode.SATELLITE) "\n高清卫星影像；精细选点也可切换街道图" else ""} else if(basemapMode==BasemapMode.SATELLITE) "\n"+if(fineSatelliteLoaded && urban.contains(target.latitude,target.longitude)) "2016 年城区影像；精细选点可切换街道图" else "当前为概览影像，精细选点请切换街道图" else if(selectedMap=="base" && ready.cameraPosition.zoom>10) "\n尚未导入精细包，当前为概览图" else ""
+        val detail=if(BuildConfig.ONLINE_MAPS) "" else if(basemapMode==BasemapMode.SATELLITE) "\n"+if(fineSatelliteLoaded && urban.contains(target.latitude,target.longitude)) "2016 年城区影像；精细选点可切换街道图" else "当前为概览影像，精细选点请切换街道图" else if(selectedMap=="base" && ready.cameraPosition.zoom>10) "\n尚未导入精细包，当前为概览图" else ""
         onPickContext((if(suggestedName.isBlank()) coordinates else "附近：$suggestedName\n$coordinates")+detail,true)
     }
     private fun refreshMapInfo() {
         val ready=map ?: return
         if(BuildConfig.ONLINE_MAPS) {
-            val zoom = ready.cameraPosition.zoom
-            val info = when {
-                !MapNetwork.connected(context) && hasOnlineOverview -> "无网络 · 显示内置地图和已缓存细节"
-                !MapNetwork.connected(context) -> "无网络 · 显示已缓存的地图"
-                basemapMode==BasemapMode.SATELLITE && hasOnlineOverview && zoom<OnlineMapAssets.SATELLITE_DETAIL_ZOOM ->
-                    "内置卫星概览 · 放大自动加载高清卫星"
-                basemapMode==BasemapMode.SATELLITE -> "高清卫星影像 · 国内直连"
-                else -> ""
-            }
-            onMapInfo(info)
+            onMapInfo(if (MapNetwork.connected(context)) "" else "离线地图")
             return
         }
         val citySatellite=urban.contains(center.latitude,center.longitude)

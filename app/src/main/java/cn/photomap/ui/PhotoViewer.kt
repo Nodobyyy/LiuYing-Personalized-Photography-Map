@@ -65,7 +65,7 @@ fun PhotoViewer(
     LaunchedEffect(entries.map { it.photo.id }) { if (entries.isNotEmpty()) pager.scrollToPage(initial.coerceIn(0, entries.lastIndex)) }
     LaunchedEffect(pager.currentPage) { onPage(pager.currentPage) }
 
-    FullScreenDialog(onDismiss = onClose, dark = true, compactTop = true) {
+    FullScreenDialog(onDismiss = onClose, dark = true) {
         MaterialTheme(
             colorScheme = darkColorScheme(
                 primary = Color(0xff6ee7b7),

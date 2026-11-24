@@ -113,15 +113,15 @@ class NativeOnlineImportMemoriesTest {
                     MainActivity::class.java.getDeclaredMethod("importDirectPhotos", List::class.java)
                         .apply { isAccessible = true }.invoke(activity, uris)
                 }
-                waitFor("补填导入信息")
-                assertAboveNavigation("放弃待补填")
+                waitFor("补填照片信息")
+                assertAboveNavigation("放弃")
                 val imported = app.library.photoDays().flatMap { it.photos }.filter { it.photo.filename in names }
                 assertEquals(3, imported.size)
                 assertTrue(imported.all { it.photo.exif.contains("LiuYing QA") })
                 assertTrue(imported.any { it.photo.date == anchor.toString() })
-                revealBelow("地图选点", height * 7 / 10, height / 3)
+                revealBelow("选点", height * 7 / 10, height / 3)
                 capture("online053-review.png")
-                tap("地图选点")
+                tap("选点", exact = true)
                 waitFor("当前导入的照片")
                 tap("搜索地名或经纬度")
                 shell("input text 48.8566,2.3522")
@@ -135,7 +135,7 @@ class NativeOnlineImportMemoriesTest {
                 val complete = app.library.photoDays().flatMap { it.photos }.filter { it.photo.filename in names }
                 assertEquals(4, complete.size)
                 tap("忆往昔")
-                waitFor("回到 ${anchor.format(label)} 前后")
+                waitFor("去年今天 · 2 张")
                 capture("online04-memories.png")
                 waitFor("去年今天 · 2 张")
                 val swipeTop = height * 19 / 100
@@ -149,12 +149,12 @@ class NativeOnlineImportMemoriesTest {
                 shell("input swipe ${width / 2} $swipeBottom ${width / 2} $swipeTop 360")
                 waitFor(anchor.plusDays(4).format(label))
                 tap(names[2], exact = true)
-                tap("信息", exact = true)
-                revealBelow("GPS纬度", height * 9 / 10, height * 6 / 10)
-                revealBelow("删除应用内副本", height * 9 / 10, height * 6 / 10,
+                tap("照片信息", exact = true)
+                revealBelow("GPS 纬度", height * 9 / 10, height * 6 / 10)
+                revealBelow("删除照片", height * 9 / 10, height * 6 / 10,
                     safeBottom = height - (24 * app.resources.displayMetrics.density).toInt())
                 waitFor("编辑文字与参数")
-                assertAboveNavigation("删除应用内副本")
+                assertAboveNavigation("删除照片")
                 capture("online053-photo-details.png")
                 tap("返回")
                 waitFor("忆往昔")
@@ -163,6 +163,9 @@ class NativeOnlineImportMemoriesTest {
                 tap("忆往昔")
                 waitFor("最接近去年今天 · 1 张")
                 waitFor(anchor.minusDays(3).format(label))
+                tap("看地图")
+                waitFor("导入照片")
+                assertNull(find(instrumentation.uiAutomation.rootInActiveWindow, "添加记录", true))
             }
         } finally {
             app.library.photoDays().flatMap { it.photos }.filter { it.photo.filename in names }
